@@ -1,0 +1,181 @@
+/* ——— partie : disposition ——— */
+
+.game {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  padding: 0;
+  overflow: hidden;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: max(8px, env(safe-area-inset-top)) 12px 8px;
+  background: rgba(7, 11, 26, 0.9);
+  border-bottom: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+
+.topbar .round {
+  font-family: var(--font-title);
+  font-size: 0.85rem;
+  color: var(--accent);
+}
+
+.topbar-tools {
+  margin-left: auto;
+  display: flex;
+  gap: 4px;
+}
+
+.threat {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8rem;
+}
+
+.threat-label {
+  color: var(--bad);
+  font-weight: 700;
+}
+
+.threat-track {
+  display: flex;
+  gap: 2px;
+}
+
+.threat-track i {
+  width: 7px;
+  height: 14px;
+  border-radius: 2px;
+  background: rgba(255, 92, 108, 0.15);
+}
+
+.threat-track i.crisis {
+  outline: 1px solid rgba(255, 192, 74, 0.7);
+}
+
+.threat-track i.on {
+  background: var(--bad);
+  box-shadow: 0 0 6px var(--bad);
+}
+
+.threat-val {
+  font-family: var(--font-title);
+  font-size: 0.75rem;
+}
+
+.game-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr minmax(320px, 400px);
+}
+
+.map-area {
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+  background: #05070f;
+}
+
+.side {
+  overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: rgba(10, 15, 36, 0.95);
+  border-left: 1px solid var(--line);
+}
+
+.turn-banner {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: rgba(7, 11, 26, 0.85);
+  border: 1px solid var(--c);
+  font-weight: 700;
+  white-space: nowrap;
+  pointer-events: auto;
+}
+
+.toasts {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  display: grid;
+  gap: 6px;
+  max-width: min(360px, 80%);
+  pointer-events: none;
+}
+
+.toast {
+  background: rgba(13, 20, 48, 0.95);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--accent);
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-size: 0.85rem;
+}
+
+.toast.crisis,
+.toast.boss,
+.toast.ko {
+  border-left-color: var(--bad);
+}
+
+.toast.levelUp,
+.toast.loot {
+  border-left-color: var(--good);
+}
+
+@media (max-width: 860px) {
+  .game {
+    height: auto;
+    min-height: 100dvh;
+    overflow: visible;
+  }
+
+  .game-body {
+    grid-template-columns: 1fr;
+  }
+
+  .map-area {
+    /* la carte (1000 × 650) plus une marge pour le bandeau du tour */
+    aspect-ratio: 4 / 3;
+    max-height: 60vh;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+  }
+
+  .side {
+    border-left: 0;
+    overflow: visible;
+  }
+
+  .topbar .goal,
+  .topbar .brand {
+    display: none;
+  }
+
+  .threat-track i {
+    width: 5px;
+  }
+
+  .turn-banner {
+    top: 6px;
+    font-size: 0.85rem;
+    padding: 4px 12px;
+  }
+}

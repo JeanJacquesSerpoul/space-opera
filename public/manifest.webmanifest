@@ -1,0 +1,11 @@
+{
+  "name": "Space Opera — Les Éclaireurs du Vide",
+  "short_name": "Space Opera",
+  "description": "Jeu de plateau d'aventure spatiale : missions, jets de d20 et menace galactique",
+  "start_url": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#070b1a",
+  "theme_color": "#070b1a",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}

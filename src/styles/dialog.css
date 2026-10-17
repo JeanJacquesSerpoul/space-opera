@@ -1,0 +1,284 @@
+/* ——— fenêtres ——— */
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(3, 5, 14, 0.72);
+  backdrop-filter: blur(3px);
+}
+
+.dialog {
+  width: min(560px, 100%);
+  max-height: 88dvh;
+  overflow-y: auto;
+  background: var(--panel-solid);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 18px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+}
+
+.dialog-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.dialog-head h2 {
+  font-size: 1.05rem;
+  color: var(--accent);
+}
+
+.dialog-body {
+  display: grid;
+  gap: 12px;
+}
+
+.rules section h3 {
+  font-size: 0.85rem;
+  color: var(--accent2);
+  margin-bottom: 4px;
+}
+
+.rules p {
+  margin: 0;
+  line-height: 1.5;
+  color: #d3dbf7;
+}
+
+.class-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.class-list li {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.class-list p {
+  font-size: 0.85rem;
+}
+
+.setting {
+  display: grid;
+  gap: 6px;
+}
+
+.setting .seg {
+  flex-wrap: wrap;
+}
+
+/* ——— marché ——— */
+
+.market {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.item {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px;
+  display: grid;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.item.worse {
+  opacity: 0.6;
+}
+
+.item.empty {
+  border-style: dashed;
+  min-height: 120px;
+}
+
+.item .slot {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  color: var(--muted);
+  letter-spacing: 0.1em;
+}
+
+.item h4 {
+  font-size: 0.85rem;
+}
+
+.item p {
+  margin: 0;
+}
+
+.item .bonus {
+  color: var(--good);
+  font-weight: 700;
+}
+
+/* ——— dé ——— */
+
+.dice-card {
+  width: min(380px, 100%);
+  text-align: center;
+  background: var(--panel-solid);
+  border: 1px solid var(--line);
+  border-top: 4px solid var(--c);
+  border-radius: 20px;
+  padding: 20px;
+  display: grid;
+  gap: 6px;
+  justify-items: center;
+}
+
+.dice-card.win {
+  box-shadow: 0 0 40px rgba(78, 230, 160, 0.35);
+}
+
+.dice-card.lose {
+  box-shadow: 0 0 40px rgba(255, 92, 108, 0.35);
+}
+
+.dice-card h3 {
+  font-size: 1.05rem;
+}
+
+.dice-card p {
+  margin: 0;
+}
+
+.dice-who {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.d20 {
+  width: 120px;
+  height: 120px;
+  margin: 6px 0;
+}
+
+.d20-body {
+  fill: #1b2660;
+  stroke: var(--c);
+  stroke-width: 3;
+}
+
+.d20-edges {
+  fill: none;
+  stroke: color-mix(in srgb, var(--c) 50%, transparent);
+  stroke-width: 1.2;
+}
+
+.d20-face {
+  fill: #fff;
+  font-family: var(--font-title);
+  font-size: 26px;
+  font-weight: 800;
+}
+
+.win .d20-body {
+  fill: #135c45;
+}
+
+.lose .d20-body {
+  fill: #5c1525;
+}
+
+.dice-total {
+  font-family: var(--font-title);
+  font-size: 0.9rem;
+}
+
+.dice-verdict {
+  font-family: var(--font-title);
+  font-size: 1.5rem;
+  margin: 6px 0 !important;
+}
+
+.win .dice-verdict {
+  color: var(--good);
+}
+
+.lose .dice-verdict {
+  color: var(--bad);
+}
+
+.dice-consequence {
+  font-weight: 700;
+  margin-bottom: 10px !important;
+}
+
+/* ——— fin de partie ——— */
+
+.end {
+  width: min(680px, 100%);
+  text-align: center;
+  border-top: 4px solid var(--c);
+  display: grid;
+  gap: 10px;
+}
+
+.end p {
+  margin: 0;
+}
+
+.end-winner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  font-size: clamp(1.1rem, 4vw, 1.6rem);
+}
+
+.results tr td .dot {
+  margin-right: 4px;
+}
+
+.results .total {
+  font-family: var(--font-title);
+  color: var(--warn);
+}
+
+.results .rank {
+  text-align: center;
+}
+
+.end-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.gate-card {
+  text-align: center;
+  border-top: 4px solid var(--c);
+  display: grid;
+  gap: 16px;
+  justify-items: center;
+}
+
+.log-list {
+  margin: 0;
+  padding: 0 0 0 4px;
+  list-style: none;
+  display: grid;
+  gap: 4px;
+  font-size: 0.85rem;
+}
+
+.log-list li {
+  padding: 4px 8px;
+  border-left: 3px solid var(--c);
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 4px;
+}
