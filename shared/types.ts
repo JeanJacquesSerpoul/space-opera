@@ -91,6 +91,14 @@ export interface Hero extends HeroConfig {
   gear: Partial<Record<Slot, number>>;
   missions: number[];
   kos: number;
+  /** Activités de monde déjà réussies (la première réussite rapporte 1 renommée). */
+  found: string[];
+}
+
+/** Avant-poste d'un héros sur une planète (un seul propriétaire par planète). */
+export interface Outpost {
+  seat: number;
+  level: 1 | 2 | 3;
 }
 
 export interface ActiveMission {
@@ -104,7 +112,11 @@ export type Action =
   | { type: 'explore'; boost?: boolean }
   | { type: 'buy'; index: number }
   | { type: 'rest' }
-  | { type: 'wait' };
+  | { type: 'wait' }
+  /** Activité propre au monde où se trouve le héros. */
+  | { type: 'activity'; index: 0 | 1; boost?: boolean }
+  /** Fonder un avant-poste sur la planète, ou améliorer le sien. */
+  | { type: 'settle' };
 
 export interface Roll {
   stat: Stat;
@@ -135,10 +147,15 @@ export interface GameEvent {
     | 'round'
     | 'crisis'
     | 'boss'
-    | 'end';
+    | 'end'
+    | 'activity'
+    | 'settle'
+    | 'income'
+    | 'hazard';
   roll?: Roll;
   missionId?: number;
   encounterId?: number;
+  activityId?: string;
   itemId?: number;
   system?: string;
   /** Valeur associée : soins, dégâts, niveau, menace… */
@@ -174,6 +191,8 @@ export interface GameState {
   encounterDeck: number[];
   encounterDiscard: number[];
   explored: string[];
+  /** Avant-postes, par planète. */
+  outposts: Record<string, Outpost>;
   events: GameEvent[];
   eventSeq: number;
   results: PlayerResult[] | null;

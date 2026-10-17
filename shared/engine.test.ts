@@ -19,6 +19,7 @@ import {
   statValue,
 } from './engine';
 import { HOME, LANES, NEIGHBORS, SYSTEMS, SYSTEM_BY_ID } from './sector';
+import { OUTPOST_COST, WORLDS } from './worlds';
 import type { BotLevel, GameState, HeroConfig, PlayerColor } from './types';
 
 const COLORS: PlayerColor[] = ['cyan', 'magenta', 'lime', 'amber', 'violet'];
@@ -264,5 +265,131 @@ describe('héros d’un invité', () => {
     const played = applyAction(applyAction(s, 0, { type: 'wait' }), 1, { type: 'wait' });
     expect(heroUntouched(played, 1)).toBe(false);
     expect(() => rebuildHero(played, 1, { classId: 'soldier', speciesId: 'vorn' })).toThrow(GameError);
+  });
+});
+
+describe('mondes et avant-postes', () => {
+  /** Partie à deux, le premier héros posé sur un monde, avec des crédits. */
+  function at(system: string, credits = 30): GameState {
+    const s = createGame(heroes(2), 7);
+    s.players[0].pos = system;
+    s.players[0].credits = credits;
+    return s;
+  }
+
+  it('décrit chaque système hors station, avec deux activités et un bonus pour chaque planète', () => {
+    for (const sys of SYSTEMS) {
+      const w = WORLDS[sys.id];
+      if (sys.kind === 'station') expect(w).toBeUndefined();
+      else {
+        expect(w.activities).toHaveLength(2);
+        expect(!!w.perk).toBe(sys.kind === 'planet');
+      }
+    }
+  });
+
+  it('tente une activité : la première réussite est une découverte (+1 renommée)', () => {
+    let s = at('thalassa');
+    const pearls = WORLDS.thalassa.activities[0];
+    // cherche une graine où le jet réussit
+    for (let seed = 0; seed < 50; seed++) {
+      s = at('thalassa');
+      s.rng = seed;
+      const next = applyAction(s, 0, { type: 'activity', index: 0 });
+      const roll = next.events.find((e) => e.kind === 'activity')!.roll!;
+      if (!roll.success) continue;
+      expect(next.players[0].found).toEqual([pearls.id]);
+      expect(next.players[0].renown).toBe(1);
+      expect(next.players[0].credits).toBe(30 + pearls.success.credits!);
+      expect(next.current).toBe(1); // l'activité termine le tour
+      return;
+    }
+    throw new Error('aucune réussite');
+  });
+
+  it('fonde puis améliore un avant-poste sans finir le tour ; une planète n’a qu’un propriétaire', () => {
+    let s = at('tycho');
+    s = applyAction(s, 0, { type: 'settle' });
+    expect(s.outposts.tycho).toEqual({ seat: 0, level: 1 });
+    expect(s.players[0].credits).toBe(30 - OUTPOST_COST[1]);
+    expect(s.players[0].renown).toBe(1);
+    expect(s.current).toBe(0);
+    s = applyAction(s, 0, { type: 'settle' });
+    s = applyAction(s, 0, { type: 'settle' });
+    expect(s.outposts.tycho.level).toBe(3);
+    expect(() => applyAction(s, 0, { type: 'settle' })).toThrow(GameError);
+
+    // un autre héros ne peut pas s'y installer ; pas d'avant-poste dans une épave
+    s = applyAction(s, 0, { type: 'wait' });
+    s.players[1].pos = 'tycho';
+    s.players[1].credits = 30;
+    expect(() => applyAction(s, 1, { type: 'settle' })).toThrow(/avant-poste/);
+    s.players[1].pos = 'wreck';
+    expect(() => applyAction(s, 1, { type: 'settle' })).toThrow(/planètes/);
+  });
+
+  it('rapporte des crédits (et le bonus du monde) à chaque tour de table', () => {
+    let s = at('tycho', 6);
+    s.outposts = { tycho: { seat: 0, level: 2 }, glacia: { seat: 0, level: 1 } };
+    const xp = s.players[0].xp;
+    s = applyAction(s, 0, { type: 'wait' });
+    s = applyAction(s, 1, { type: 'wait' }); // fin du tour de table
+    // Tycho : niveau 2 + 1 (monde minier) ; Glacia : niveau 1, +1 XP
+    expect(s.players[0].credits).toBe(6 + 3 + 1);
+    expect(s.players[0].xp).toBe(xp + 1);
+    expect(s.events.some((e) => e.kind === 'income' && e.seat === 0 && e.amount === 4)).toBe(true);
+  });
+
+  it('blesse à l’arrivée sur un monde hostile, sauf avec une armure', () => {
+    let s = createGame(heroes(2), 3);
+    s.players[0].pos = 'ferraille';
+    s.movesLeft = 3;
+    const target = [...reachable(s, 0).keys()].find((id) => WORLDS[id]?.hazard)!;
+    expect(target).toBeTruthy();
+    const hp = s.players[0].hp;
+    const hurt = applyAction(s, 0, { type: 'move', to: target });
+    expect(hurt.players[0].hp).toBeLessThan(hp);
+    expect(hurt.events.at(-1)?.kind).toBe('hazard');
+    s = structuredClone(s);
+    s.players[0].gear.armor = Object.values(ITEM_BY_ID).find((i) => i.slot === 'armor')!.id;
+    const safe = applyAction(s, 0, { type: 'move', to: target });
+    expect(safe.events.some((e) => e.kind === 'hazard')).toBe(false);
+  });
+
+  it('abrite son propriétaire des crises, soigne et ouvre le marché selon le monde', () => {
+    // repos complet sur un monde de soins
+    let s = at('hydra');
+    s.outposts = { hydra: { seat: 0, level: 1 } };
+    s.players[0].hp = 1;
+    s.players[0].resolve = 0;
+    const rested = applyAction(s, 0, { type: 'rest' });
+    expect(rested.players[0].hp).toBe(maxHp(rested.players[0]));
+    expect(rested.players[0].resolve).toBeGreaterThan(0);
+    // marché sur un monde marchand
+    s = at('vespera');
+    s.outposts = { vespera: { seat: 0, level: 1 } };
+    const index = s.market.findIndex((id) => id !== null);
+    expect(applyAction(s, 0, { type: 'buy', index }).players[0].gear).not.toEqual({});
+    expect(() => applyAction(at('vespera'), 0, { type: 'buy', index })).toThrow(GameError);
+    // crise : le propriétaire sur son avant-poste n'est pas blessé, l'autre héros l'est
+    s = at('hydra');
+    s.outposts = { hydra: { seat: 0, level: 1 } };
+    s.players[1].pos = 'glacia';
+    s.threat = 4;
+    s = applyAction(s, 0, { type: 'wait' });
+    const before = [s.players[0].hp, s.players[1].hp];
+    s = applyAction(s, 1, { type: 'wait' });
+    expect(s.crises).toContain(5);
+    expect(s.players[0].hp).toBe(before[0]);
+    expect(s.players[1].hp).toBeLessThan(before[1]);
+  });
+
+  it('reprend une partie enregistrée avant les mondes', () => {
+    const s = createGame(heroes(2), 9) as Partial<GameState> & GameState;
+    delete (s as { outposts?: unknown }).outposts;
+    for (const p of s.players) delete (p as { found?: unknown }).found;
+    const next = applyAction(s, 0, { type: 'wait' });
+    expect(next.outposts).toEqual({});
+    expect(next.players.every((p) => Array.isArray(p.found))).toBe(true);
   });
 });

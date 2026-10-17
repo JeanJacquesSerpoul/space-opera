@@ -2,6 +2,7 @@ import { useEffect, useMemo } from 'react';
 import { ENCOUNTER_BY_ID, ITEM_BY_ID, MISSION_BY_ID } from '../../shared/data';
 import { type Lang, type MessageKey, type Params, type T, makeT } from '../../shared/i18n';
 import { SYSTEM_BY_ID } from '../../shared/sector';
+import { ACTIVITY_BY_ID } from '../../shared/worlds';
 import type { GameEvent, GameState, Item, Text } from '../../shared/types';
 import { getPref, usePref } from './prefs';
 
@@ -72,6 +73,17 @@ export function formatEvent(e: GameEvent, s: GameState, t: T, lang: Lang): strin
       return t('event.boss', { system });
     case 'end':
       return t('event.end', { name });
+    case 'activity': {
+      const activity = ACTIVITY_BY_ID[e.activityId!].name[lang];
+      const text = t(e.roll?.success ? 'event.activityWin' : 'event.activityFail', { name, activity, system, ...roll });
+      return e.amount ? `${text} ${t('event.found', { name, activity })}` : text;
+    }
+    case 'settle':
+      return e.amount === 1 ? t('event.settle', { name, system }) : t('event.develop', { name, system, n: e.amount ?? 1 });
+    case 'income':
+      return t('event.income', { name, n: e.amount ?? 0 });
+    case 'hazard':
+      return t('event.hazard', { name, system, n: e.amount ?? 0 });
   }
 }
 

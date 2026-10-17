@@ -4,7 +4,7 @@ import type { MessageKey } from '../../shared/i18n';
 import { useT } from '../lib/i18n';
 import { Dialog } from './Dialog';
 
-const SECTIONS = ['goal', 'turn', 'checks', 'missions', 'explore', 'threat', 'score'] as const;
+const SECTIONS = ['goal', 'turn', 'checks', 'missions', 'explore', 'worlds', 'threat', 'score'] as const;
 
 export function RulesDialog({ onClose }: { onClose: () => void }) {
   const { t } = useT();

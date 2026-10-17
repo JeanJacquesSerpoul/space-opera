@@ -2,6 +2,7 @@ import { motion } from 'motion/react';
 import { useEffect, useState } from 'react';
 import { ENCOUNTER_BY_ID, MISSION_BY_ID } from '../../shared/data';
 import { MISSION_REWARD } from '../../shared/engine';
+import { ACTIVITY_BY_ID } from '../../shared/worlds';
 import type { MessageKey } from '../../shared/i18n';
 import type { GameEvent, GameState, Outcome } from '../../shared/types';
 import { systemName, useT } from '../lib/i18n';
@@ -9,7 +10,7 @@ import { playSfx } from '../lib/sfx';
 import { PLAYER_FILL, STAT_ICON } from '../lib/theme';
 
 /** Résumé compact d'un gain ou d'une perte : « +2 ★ · −4 ♥ ». */
-function outcomeText(o: Outcome): string {
+export function outcomeText(o: Outcome): string {
   const parts: string[] = [];
   const sign = (n: number) => (n > 0 ? `+${n}` : `−${-n}`);
   if (o.renown) parts.push(`${sign(o.renown)} ★`);
@@ -72,6 +73,10 @@ export function DiceOverlay({
     consequence = roll.success
       ? outcomeText({ renown: r.renown + (roll.crit ? 2 : 0), credits: r.credits, xp: r.xp })
       : outcomeText({ hp: -r.damage, xp: 1 });
+  } else if (event.kind === 'activity') {
+    const a = ACTIVITY_BY_ID[event.activityId!];
+    title = tx(a.name);
+    consequence = outcomeText(roll.success ? { ...a.success, renown: (a.success.renown ?? 0) + (event.amount ?? 0) } : a.failure);
   } else {
     const e = ENCOUNTER_BY_ID[event.encounterId!];
     title = tx(e.name);

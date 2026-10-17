@@ -2,6 +2,7 @@ import { motion } from 'motion/react';
 import { memo } from 'react';
 import { TransformComponent, TransformWrapper } from 'react-zoom-pan-pinch';
 import { CLASSES, MISSION_BY_ID } from '../../shared/data';
+import { outpostsOf } from '../../shared/engine';
 import { LANES, SECTOR_H, SECTOR_W, SYSTEMS, SYSTEM_BY_ID } from '../../shared/sector';
 import type { GameState, StarSystem } from '../../shared/types';
 import { useT } from '../lib/i18n';
@@ -93,6 +94,7 @@ export function StarMap({
   const current = state.players[state.current];
   const missionAt = new Map(state.board.map((b) => [b.system, b.missionId]));
 
+  const outposts = outpostsOf(state);
   return (
     <TransformWrapper
       minScale={1}
@@ -180,6 +182,19 @@ export function StarMap({
                   <text x={label.dx} y={label.dy} textAnchor={label.anchor} className="sys-label">
                     {sys.name[lang]}
                   </text>
+                  {outposts[sys.id] && (
+                    <g className="outpost" transform="translate(-19 -14) scale(1.6)">
+                      <path
+                        d="M-7 2 L0 -6 L7 2 L7 8 L-7 8 Z"
+                        fill={PLAYER_FILL[state.players[outposts[sys.id].seat].color]}
+                        filter="url(#glow)"
+                      />
+                      <text y={6} textAnchor="middle">
+                        {outposts[sys.id].level}
+                      </text>
+                      <title>{state.players[outposts[sys.id].seat].name}</title>
+                    </g>
+                  )}
                   {missionId !== undefined && (
                     <g className="mission-pin" transform="translate(15 -15)">
                       <rect

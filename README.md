@@ -69,7 +69,7 @@ Ouvrir http://localhost:5173. Production : `npm run build` puis `npm start` (por
 ## Structure
 
 ```
-shared/   moteur de jeu pur (règles, IA, données, secteur, salons, statistiques, i18n) – serveur et client
+shared/   moteur de jeu pur (règles, IA, données, secteur, mondes, salons, statistiques, i18n) – serveur et client
 server/   API Express + WebSocket des salons + base SQLite (data/space-opera.db, chemin modifiable via DB_PATH)
 src/      interface React (carte stellaire SVG, fiche de héros, dé animé, salons, présentation, partie guidée)
 e2e/      scénarios Playwright
@@ -85,6 +85,11 @@ scripts/  simulation d'équilibrage
 - **Missions** : rang 1 (DD 12, +3), rang 2 (DD 15, +5), rang 3 (DD 18, +8, menace −1). Échec : blessure et menace +1.
 - **Classes** : Soldat (blindage), Mystique (soins), Technomancien (relance en Tech), Agent (+1 saut),
   Mécano (équipement −2 crédits), Diplomate (+3 crédits par mission). **Espèces** : Humain, Androïde, Vorn, Lumien.
+- **Mondes** : chaque système hors station a son biome, parfois un danger à l'arrivée (évité par une armure) et
+  deux activités propres (jet de d20, +1 renommée à la première réussite). Sur une planète libre, fondez un
+  **avant-poste** (6 cr, +1 renommée) puis améliorez-le jusqu'au niveau 3 (6 puis 8 cr, +1 puis +2 renommée), sans
+  finir le tour : il rapporte son niveau en crédits par tour de table, abrite son propriétaire des crises et donne le
+  bonus du monde (infirmerie, comptoir, gisement, académie ou retraite). Une planète n'a qu'un propriétaire.
 - **Fléau** : +1 menace par tour de table ; crises à 5, 10, 15 (le Vaisseau-Ruche, DD 22, apparaît à 10).
 - **Fin** : un héros à 40 de renommée ou menace à 18. Score = renommée + crédits ÷ 5 + 5 points de Légende
   (le plus de missions).

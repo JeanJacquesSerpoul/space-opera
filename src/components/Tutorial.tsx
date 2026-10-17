@@ -50,7 +50,7 @@ export interface CoachContext {
 
 interface Step {
   /** Clé de traduction : `tutorial.<id>.title` et `tutorial.<id>.text`. */
-  id: 'jump' | 'act' | 'dice' | 'station' | 'threat' | 'end';
+  id: 'jump' | 'act' | 'dice' | 'station' | 'worlds' | 'threat' | 'end';
   done?: (c: CoachContext, since: number) => boolean;
 }
 
@@ -62,6 +62,7 @@ const STEPS: Step[] = [
   { id: 'act', done: (c, since) => mine(c, since, ['mission', 'explore', 'rest', 'wait']) },
   { id: 'dice' },
   { id: 'station' },
+  { id: 'worlds' },
   { id: 'threat' },
   { id: 'end' },
 ];

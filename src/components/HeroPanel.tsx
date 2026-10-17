@@ -6,7 +6,9 @@ import {
   LEVEL_XP,
   MISSION_REWARD,
   RENOWN_GOAL,
+  canShopAt,
   checkChance,
+  fullRestAt,
   heroLevel,
   heroSpeed,
   itemCost,
@@ -14,13 +16,18 @@ import {
   maxHp,
   maxResolve,
   missionsAt,
+  outpostIncome,
+  outpostsOf,
+  settleOffer,
   statValue,
 } from '../../shared/engine';
 import type { MessageKey } from '../../shared/i18n';
 import { SYSTEM_BY_ID } from '../../shared/sector';
-import type { Action, GameState, Hero, Slot } from '../../shared/types';
+import type { Action, GameState, Hero, Outpost, Slot } from '../../shared/types';
+import { BIOME_ICON, OUTPOST_MAX, OUTPOST_RENOWN, WORLDS } from '../../shared/worlds';
 import { itemBonus, systemName, useT } from '../lib/i18n';
 import { KIND_ICON, PLAYER_FILL, STAT_ICON, TIER_FILL } from '../lib/theme';
+import { outcomeText } from './Dice';
 import { Dialog } from './Dialog';
 
 const pct = (p: number) => Math.round(p * 100);
@@ -28,8 +35,8 @@ const SLOTS: Slot[] = ['weapon', 'tool', 'focus', 'kit', 'armor', 'engine'];
 
 // ---------------------------------------------------------------- fiche
 
-export function HeroSheet({ hero }: { hero: Hero }) {
-  const { t, tx } = useT();
+export function HeroSheet({ hero, outposts = [] }: { hero: Hero; outposts?: [string, Outpost][] }) {
+  const { t, tx, lang } = useT();
   const level = heroLevel(hero);
   const hpMax = maxHp(hero);
   const next = LEVEL_XP[level];
@@ -111,6 +118,17 @@ export function HeroSheet({ hero }: { hero: Hero }) {
         })}
         {SLOTS.every((s) => !hero.gear[s]) && <span className="muted small">{t('hero.noGear')}</span>}
       </div>
+
+      {outposts.length > 0 && (
+        <div className="hero-outposts">
+          <span className="muted small">{t('hero.outposts')}</span>
+          {outposts.map(([system, o]) => (
+            <span key={system} className="gear-chip" title={t(`perk.${WORLDS[system].perk}` as MessageKey)}>
+              {BIOME_ICON[WORLDS[system].biome]} {systemName(system, lang)} <LevelPips level={o.level} />
+            </span>
+          ))}
+        </div>
+      )}
     </section>
   );
 }
@@ -192,7 +210,9 @@ export function ActionPanel({
   const sys = SYSTEM_BY_ID[hero.pos];
   const missions = missionsAt(state, hero.pos);
   const station = sys.kind === 'station';
-  const heal = station || hero.classId === 'mystic' ? maxHp(hero) - hero.hp : Math.min(FIELD_REST, maxHp(hero) - hero.hp);
+  const shop = canShopAt(state, state.current, hero.pos);
+  const fullRest = fullRestAt(state, state.current, hero.pos);
+  const heal = fullRest || hero.classId === 'mystic' ? maxHp(hero) - hero.hp : Math.min(FIELD_REST, maxHp(hero) - hero.hp);
 
   return (
     <section className="actions">
@@ -208,6 +228,8 @@ export function ActionPanel({
         <MissionCard key={id} missionId={id} hero={hero} system={hero.pos} canAct={canAct} onAct={onAct} />
       ))}
 
+      <WorldCard state={state} system={hero.pos} canAct={canAct} onAct={onAct} />
+
       <div className="action-grid">
         {!station && (
           <button type="button" className="btn action" disabled={!canAct} onClick={() => onAct({ type: 'explore' })}>
@@ -216,7 +238,7 @@ export function ActionPanel({
             <small>{state.explored.includes(hero.pos) ? t('action.exploreHint') : t('action.discovery')}</small>
           </button>
         )}
-        {station && (
+        {shop && (
           <button type="button" className="btn action" disabled={!canAct} onClick={onShop}>
             <span className="a-icon">🛒</span>
             <span>{t('action.shop')}</span>
@@ -226,7 +248,7 @@ export function ActionPanel({
         <button type="button" className="btn action" disabled={!canAct} onClick={() => onAct({ type: 'rest' })}>
           <span className="a-icon">🛌</span>
           <span>{t('action.rest')}</span>
-          <small>{station ? t('action.restFull') : t('action.restHint', { n: heal })}</small>
+          <small>{fullRest ? t('action.restFull') : t('action.restHint', { n: heal })}</small>
         </button>
         <button type="button" className="btn action ghost" disabled={!canAct} onClick={() => onAct({ type: 'wait' })}>
           <span className="a-icon">⏭</span>
@@ -274,6 +296,132 @@ export function SystemInfo({ state, system, onClose }: { state: GameState; syste
       {missions.map((id) => (
         <MissionCard key={id} missionId={id} hero={hero} system={system} canAct={false} />
       ))}
+      <WorldCard state={state} system={system} canAct={false} />
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------- monde : activités et avant-poste
+
+function LevelPips({ level }: { level: number }) {
+  return (
+    <span className="level-pips" aria-hidden>
+      {Array.from({ length: OUTPOST_MAX }, (_, i) => (
+        <i key={i} className={i < level ? 'on' : ''} />
+      ))}
+    </span>
+  );
+}
+
+/**
+ * Ce qu'on peut faire sur un monde : biome, danger, activités, avant-poste.
+ * Sur le monde du héros dont c'est le tour, les boutons permettent d'agir.
+ */
+export function WorldCard({
+  state,
+  system,
+  canAct,
+  onAct,
+}: {
+  state: GameState;
+  system: string;
+  canAct: boolean;
+  onAct?: (a: Action) => void;
+}) {
+  const { t, tx } = useT();
+  const world = WORLDS[system];
+  if (!world) return null;
+  const seat = state.current;
+  const hero = state.players[seat];
+  const here = hero.pos === system && canAct && !!onAct;
+  const outpost = outpostsOf(state)[system];
+  const owner = outpost ? state.players[outpost.seat] : null;
+  const offer = settleOffer(state, seat, system);
+  const found = hero.found ?? [];
+  return (
+    <section className="world" data-biome={world.biome}>
+      <header className="world-head">
+        <span className="biome">
+          {BIOME_ICON[world.biome]} {t(`biome.${world.biome}` as MessageKey)}
+        </span>
+        {world.hazard && <span className="hazard small">⚠ {t('world.hazard', { n: world.hazard })}</span>}
+      </header>
+      <p className="world-desc">{tx(world.desc)}</p>
+
+      <h4>{t('world.activities')}</h4>
+      {world.activities.map((a, index) => {
+        const done = found.includes(a.id);
+        const p = checkChance(hero, [a.stat], a.dc);
+        const pb = checkChance(hero, [a.stat], a.dc, true);
+        return (
+          <article key={a.id} className={`activity ${done ? 'done' : ''}`}>
+            <header>
+              <b>{tx(a.name)}</b>
+              <span className={`small ${done ? 'found' : 'first'}`}>
+                {done ? `✓ ${t('world.found')}` : t('world.firstBonus')}
+              </span>
+            </header>
+            <p className="mission-line">
+              <span className="stat-chip">
+                {STAT_ICON[a.stat]} {t(`stat.${a.stat}` as MessageKey)}
+              </span>
+              <span className="dc">{t('mission.dc', { dc: a.dc })}</span>
+              <span className="small reward">{outcomeText(a.success)}</span>
+              {Object.keys(a.failure).length > 0 && <span className="small risk">✗ {outcomeText(a.failure)}</span>}
+            </p>
+            {here ? (
+              <div className="mission-actions">
+                <button type="button" className="btn primary" onClick={() => onAct({ type: 'activity', index: index as 0 | 1 })}>
+                  🎲 {t('action.mission')} <span className="chance">{t('action.chance', { p: pct(p) })}</span>
+                </button>
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={hero.resolve <= 0}
+                  onClick={() => onAct({ type: 'activity', index: index as 0 | 1, boost: true })}
+                >
+                  ✦ {t('action.boost')} <span className="chance">{t('action.chance', { p: pct(pb) })}</span>
+                </button>
+              </div>
+            ) : (
+              <p className="chance-line">🎲 {t('action.chance', { p: pct(p) })}</p>
+            )}
+          </article>
+        );
+      })}
+
+      <div className="outpost-box">
+        {!world.perk ? (
+          <p className="muted small">{t('world.uninhabitable')}</p>
+        ) : (
+          <>
+            <p className="small perk">🏠 {t(`perk.${world.perk}` as MessageKey)}</p>
+            {outpost && owner ? (
+              <p className="small">
+                <span className="chip" style={{ '--c': PLAYER_FILL[owner.color] } as React.CSSProperties}>
+                  {CLASSES[owner.classId].glyph} {t('world.outpost', { name: owner.name, n: outpost.level })}
+                </span>{' '}
+                <LevelPips level={outpost.level} /> · {t('world.income', { n: outpostIncome(system, outpost) })}
+              </p>
+            ) : (
+              <p className="muted small">{t('world.free')}</p>
+            )}
+            {outpost?.seat === seat && hero.pos === system && <p className="muted small">{t('world.shelter')}</p>}
+            {here && offer && (
+              <button
+                type="button"
+                className="btn primary settle"
+                disabled={hero.credits < offer.cost}
+                onClick={() => onAct({ type: 'settle' })}
+              >
+                🏗 {offer.level === 1 ? t('world.settle') : t('world.develop', { n: offer.level })}
+                <small>{t('world.settleHint', { cost: offer.cost, renown: OUTPOST_RENOWN[offer.level] })}</small>
+              </button>
+            )}
+            {outpost?.seat === seat && outpost.level >= OUTPOST_MAX && <p className="muted small">{t('world.maxLevel')}</p>}
+          </>
+        )}
+      </div>
     </section>
   );
 }
@@ -348,6 +496,8 @@ export function CrewBar({ state, onPick }: { state: GameState; onPick: (seat: nu
           </span>
           <span className="crew-stats">
             ★{h.renown} · ♥{h.hp} · {t('hero.level', { n: heroLevel(h) })}
+            {Object.values(outpostsOf(state)).some((o) => o.seat === seat) &&
+              ` · 🏠${Object.values(outpostsOf(state)).filter((o) => o.seat === seat).length}`}
           </span>
         </button>
       ))}

@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from 'motion/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { CRISES, MAX_THREAT, RENOWN_GOAL, reachable } from '../../shared/engine';
+import { CRISES, MAX_THREAT, RENOWN_GOAL, outpostsOf, reachable } from '../../shared/engine';
 import type { MessageKey } from '../../shared/i18n';
 import type { Action, GameEvent, GameState } from '../../shared/types';
 import { api } from '../lib/api';
@@ -20,7 +20,7 @@ import { StarMap } from './StarMap';
 import { Coach } from './Tutorial';
 
 /** Événements signalés par une notification. */
-const NOTABLE = new Set<GameEvent['kind']>(['levelUp', 'ko', 'crisis', 'boss', 'loot', 'discovery']);
+const NOTABLE = new Set<GameEvent['kind']>(['levelUp', 'ko', 'crisis', 'boss', 'loot', 'discovery', 'settle', 'hazard']);
 
 function ThreatTrack({ threat }: { threat: number }) {
   const { t } = useT();
@@ -138,7 +138,7 @@ export function Game({
         ? 'victory'
         : kinds.has('crisis') || kinds.has('boss')
           ? 'crisis'
-          : kinds.has('levelUp')
+          : kinds.has('levelUp') || kinds.has('settle')
             ? 'levelUp'
             : rolled && !diceOn
               ? rolled.roll!.success
@@ -386,7 +386,10 @@ export function Game({
             )}
           </div>
           <div className="side-pane" data-pane="hero">
-            <HeroSheet hero={viewed} />
+            <HeroSheet
+              hero={viewed}
+              outposts={Object.entries(outpostsOf(state)).filter(([, o]) => o.seat === (viewSeat ?? state.current))}
+            />
           </div>
           <div className="side-pane" data-pane="log">
             <LogList state={state} />

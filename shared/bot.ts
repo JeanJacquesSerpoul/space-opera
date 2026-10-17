@@ -5,16 +5,23 @@ import {
   DC,
   DIPLOMAT_CREDITS,
   FIELD_REST,
+  MAX_THREAT,
   MISSION_REWARD,
+  RENOWN_GOAL,
+  canShopAt,
   checkChance,
+  fullRestAt,
   heroSpeed,
   itemCost,
   jumps,
   maxHp,
   maxResolve,
   missionsAt,
+  outpostsOf,
   reachable,
+  settleOffer,
 } from './engine';
+import { OUTPOST_RENOWN, WORLDS } from './worlds';
 import { SYSTEM_BY_ID } from './sector';
 import type { Action, BotLevel, GameState, Hero, Outcome, Stat } from './types';
 
@@ -72,8 +79,40 @@ export function exploreValue(s: GameState, h: Hero, system: string, boost: boole
   return v - (boost ? resolveValue(h) : 0);
 }
 
-function restValue(h: Hero, system: string): number {
-  const station = SYSTEM_BY_ID[system].kind === 'station';
+/** Valeur espérée d'une activité de monde (avec la renommée de la première réussite). */
+export function activityValue(h: Hero, system: string, index: 0 | 1, boost: boolean): number {
+  const a = WORLDS[system].activities[index];
+  const p = checkChance(h, [a.stat], a.dc, boost);
+  const first = (h.found ?? []).includes(a.id) ? 0 : 1;
+  return p * (outcomeValue(h, a.success) + first) + (1 - p) * outcomeValue(h, a.failure) - (boost ? resolveValue(h) : 0);
+}
+
+/** Tours de table qu'il reste probablement à jouer (pour estimer ce que rapportera un avant-poste). */
+function roundsLeft(s: GameState): number {
+  const best = Math.max(...s.players.map((p) => p.renown));
+  return Math.max(1, Math.min(MAX_THREAT - s.threat, (RENOWN_GOAL - best) / 3));
+}
+
+/** Intérêt de fonder (ou d'améliorer) un avant-poste ici : renommée, revenus à venir, bonus du monde. */
+export function settleValue(s: GameState, seat: number, system: string): number | null {
+  const h = s.players[seat];
+  const offer = settleOffer(s, seat, system);
+  if (!offer || h.credits < offer.cost) return null;
+  const rounds = roundsLeft(s);
+  const perk = WORLDS[system].perk;
+  const incomeGain = 1 + (perk === 'credits' && offer.level === 1 ? 1 : 0);
+  let v = OUTPOST_RENOWN[offer.level] + ((incomeGain * rounds) / CREDITS_PER_POINT) * 1.5;
+  if (offer.level === 1) {
+    if (perk === 'xp') v += rounds * 0.5;
+    if (perk === 'recharge') v += Math.min(rounds, 4) * 0.4;
+    if (perk === 'heal' || perk === 'market') v += 0.8;
+  }
+  // les crédits dépensés ne servent plus à s'équiper ni au score
+  return v - (offer.cost / CREDITS_PER_POINT) * 1.5 - 0.4;
+}
+
+function restValue(s: GameState, seat: number, h: Hero, system: string): number {
+  const station = fullRestAt(s, seat, system);
   const missing = maxHp(h) - h.hp;
   const healed = station || h.classId === 'mystic' ? missing : Math.min(FIELD_REST, missing);
   const urgency = 1 + missing / maxHp(h);
@@ -113,7 +152,18 @@ function futureValue(s: GameState, h: Hero, at: string): number {
     const turns = Math.max(1, Math.ceil(jumps(at, b.system) / speed));
     best = Math.max(best, missionValue(h, b.missionId, h.resolve > 0) * 0.7 ** turns);
   }
-  if (h.hp < maxHp(h) * 0.5 && SYSTEM_BY_ID[at].kind === 'station') best = Math.max(best, 2);
+  const seat = s.players.indexOf(h);
+  // ses avant-postes à améliorer (ou une planète libre où s'installer) attirent aussi
+  for (const system of Object.keys(WORLDS)) {
+    if (system === at) continue;
+    const settle = settleValue(s, seat, system);
+    if (settle === null || settle <= 0) continue;
+    const turns = Math.max(1, Math.ceil(jumps(at, system) / speed));
+    best = Math.max(best, settle * 0.7 ** turns);
+  }
+  const own = outpostsOf(s)[at]?.seat === seat;
+  if (h.hp < maxHp(h) * 0.5 && (SYSTEM_BY_ID[at].kind === 'station' || (own && WORLDS[at].perk === 'heal')))
+    best = Math.max(best, 2);
   return best;
 }
 
@@ -128,11 +178,15 @@ export function botAction(s: GameState): Action {
   const h = s.players[seat];
   const level = levelOf(h);
 
-  if (SYSTEM_BY_ID[h.pos].kind === 'station' && level !== 'easy') {
+  // construire ne termine pas le tour : l'ordinateur s'installe dès que cela vaut la peine
+  const settleHere = settleValue(s, seat, h.pos);
+  if (settleHere !== null && settleHere > (level === 'easy' ? 1.5 : 0.3)) return { type: 'settle' };
+
+  if (canShopAt(s, seat, h.pos) && level !== 'easy') {
     const index = bestPurchase(s, h);
     if (index !== null) return { type: 'buy', index };
   }
-  if (SYSTEM_BY_ID[h.pos].kind === 'station' && level === 'easy') {
+  if (canShopAt(s, seat, h.pos) && level === 'easy') {
     const index = s.market.findIndex((id) => id !== null && itemCost(h, id) <= h.credits && itemValue(h, id) > 1);
     if (index >= 0 && chance(s, 3) < 0.6) return { type: 'buy', index };
   }
@@ -157,7 +211,14 @@ export function botAction(s: GameState): Action {
       consider(dest, { type: 'explore' }, exploreValue(s, h, dest, false) + future);
       if (canBoost && level === 'hard') consider(dest, { type: 'explore', boost: true }, exploreValue(s, h, dest, true) + future);
     }
-    consider(dest, { type: 'rest' }, restValue(h, dest) + future);
+    if (WORLDS[dest]) {
+      for (const index of [0, 1] as const) {
+        consider(dest, { type: 'activity', index }, activityValue(h, dest, index, false) + future);
+        if (canBoost && level === 'hard')
+          consider(dest, { type: 'activity', index, boost: true }, activityValue(h, dest, index, true) + future);
+      }
+    }
+    consider(dest, { type: 'rest' }, restValue(s, seat, h, dest) + future);
     consider(dest, { type: 'wait' }, future - 0.3);
   }
 

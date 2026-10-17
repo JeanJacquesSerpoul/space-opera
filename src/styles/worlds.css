@@ -1,0 +1,193 @@
+/* ——— mondes : biome, activités, avant-postes ——— */
+
+.world {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background:
+    radial-gradient(ellipse at 100% 0%, color-mix(in srgb, var(--biome, var(--accent)) 18%, transparent), transparent 60%),
+    rgba(255, 255, 255, 0.02);
+}
+
+.world-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 6px;
+  align-items: baseline;
+}
+
+.biome {
+  font-family: var(--font-title);
+  font-size: 0.85rem;
+  color: var(--biome, var(--accent));
+}
+
+.hazard {
+  color: var(--warn);
+}
+
+.world-desc {
+  margin: 0;
+  font-size: 0.88rem;
+  font-style: italic;
+  color: #c9d3f5;
+  line-height: 1.4;
+}
+
+.world h4 {
+  margin: 4px 0 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.activity {
+  display: grid;
+  gap: 4px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--biome, var(--accent));
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.activity header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 6px;
+  align-items: baseline;
+}
+
+.activity .first {
+  color: var(--warn);
+}
+
+.activity .found {
+  color: var(--good);
+}
+
+.activity .mission-line {
+  margin: 0;
+}
+
+.outpost-box {
+  display: grid;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--line);
+}
+
+.outpost-box p {
+  margin: 0;
+}
+
+.perk {
+  color: #c9d3f5;
+}
+
+.btn.settle {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+}
+
+.btn.settle small {
+  font-weight: 400;
+  opacity: 0.85;
+}
+
+.level-pips {
+  display: inline-flex;
+  gap: 2px;
+  vertical-align: middle;
+}
+
+.level-pips i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  border: 1px solid var(--accent);
+}
+
+.level-pips i.on {
+  background: var(--accent);
+}
+
+.hero-outposts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+/* couleur d'ambiance par biome */
+.world[data-biome="ice"] {
+  --biome: #9fe7ff;
+}
+.world[data-biome="dark"] {
+  --biome: #a28bff;
+}
+.world[data-biome="jungle"] {
+  --biome: #6ee36e;
+}
+.world[data-biome="volcanic"] {
+  --biome: #ff7a45;
+}
+.world[data-biome="garden"] {
+  --biome: #ff9fd8;
+}
+.world[data-biome="ocean"] {
+  --biome: #3fb6ff;
+}
+.world[data-biome="desert"] {
+  --biome: #ffc04a;
+}
+.world[data-biome="fungal"] {
+  --biome: #d08bff;
+}
+.world[data-biome="mining"] {
+  --biome: #c9a46b;
+}
+.world[data-biome="industrial"] {
+  --biome: #a8b4c8;
+}
+.world[data-biome="city"] {
+  --biome: #ff6fae;
+}
+.world[data-biome="sanctuary"] {
+  --biome: #f3f0c8;
+}
+.world[data-biome="gas"] {
+  --biome: #ffb36b;
+}
+.world[data-biome="archipelago"] {
+  --biome: #4ee6c8;
+}
+.world[data-biome="war"] {
+  --biome: #ff5c6c;
+}
+.world[data-biome="wreck"] {
+  --biome: #8f9cc4;
+}
+.world[data-biome="nebula"] {
+  --biome: #b48bff;
+}
+
+/* carte : avant-poste du propriétaire */
+.outpost path {
+  stroke: #070b1a;
+  stroke-width: 1.5;
+}
+
+.outpost text {
+  font-size: 7px;
+  font-weight: 800;
+  fill: #070b1a;
+  font-family: var(--font-title);
+  pointer-events: none;
+}

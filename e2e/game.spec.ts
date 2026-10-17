@@ -138,7 +138,7 @@ test('accompagne une partie guidée pas à pas', async ({ page }) => {
   await expect(coach.getByText('Choisissez une action')).toBeVisible();
   await page.getByRole('button', { name: /Finir le tour/ }).click();
   await expect(coach.getByText('Le jet de d20')).toBeVisible();
-  for (let i = 0; i < 3; i++) await coach.getByRole('button', { name: 'Suivant' }).click();
+  for (let i = 0; i < 4; i++) await coach.getByRole('button', { name: 'Suivant' }).click();
   await expect(coach.getByText('Bon voyage, éclaireur !')).toBeVisible();
   await coach.getByRole('button', { name: 'À moi de jouer !' }).click();
   await expect(coach).toHaveCount(0);
@@ -187,4 +187,27 @@ test('sur téléphone, range le panneau de jeu dans un tiroir à onglets', async
   // à mon tour, le tiroir revient de lui-même sur les actions
   await expect(finish).toBeVisible({ timeout: 30_000 });
   await expect(page.getByRole('tab', { name: /Actions/ })).toHaveAttribute('aria-selected', 'true');
+});
+
+test('vit sur une planète : activités propres et avant-poste', async ({ page }) => {
+  await page.goto('/#/nouvelle');
+  await page.getByRole('button', { name: /Décoller/ }).click();
+  await expect(page.getByText('Au tour de Vous')).toBeVisible();
+
+  // Thalassa, voisine du Nexus : un océan, ses deux activités et une planète libre
+  await page.locator('.system[data-system="thalassa"]').dispatchEvent('click');
+  const world = page.locator('.actions .world');
+  await expect(world.getByText('🌊 Océan')).toBeVisible();
+  await expect(world.getByText('Pêche aux perles')).toBeVisible();
+  await expect(world.getByText('Plongée dans les abysses')).toBeVisible();
+  await expect(world.getByText('Aucun avant-poste : la planète est libre.')).toBeVisible();
+
+  // fonder ne termine pas le tour ; l'avant-poste apparaît sur la carte et dans l'équipage
+  await world.getByRole('button', { name: /Fonder un avant-poste/ }).click();
+  await expect(world.getByText('Avant-poste de Vous · niveau 1')).toBeVisible();
+  await expect(page.locator('.outpost')).toHaveCount(1);
+  await expect(page.getByText('Au tour de Vous')).toBeVisible();
+  // plus assez de crédits pour l'améliorer tout de suite
+  await expect(world.getByRole('button', { name: /Améliorer l’avant-poste/ })).toBeDisabled();
+  await expect(world.getByRole('button', { name: /Tenter/ }).first()).toBeEnabled();
 });

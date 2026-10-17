@@ -11,7 +11,8 @@ import {
   STAT_SLOT,
 } from './data';
 import { HOME, NEIGHBORS, SYSTEM_BY_ID, SYSTEMS } from './sector';
-import type { Action, GameEvent, GameState, Hero, HeroConfig, Outcome, PlayerResult, Roll, Stat, Tier } from './types';
+import { OUTPOST_COST, OUTPOST_MAX, OUTPOST_RENOWN, WORLDS } from './worlds';
+import type { Action, GameEvent, GameState, Hero, HeroConfig, Outcome, Outpost, PlayerResult, Roll, Stat, Tier } from './types';
 
 // ---------------------------------------------------------------- constantes des règles
 
@@ -70,7 +71,12 @@ export type ErrorCode =
   | 'notHost'
   | 'seatPresent'
   | 'heroLocked'
-  | 'tooFast';
+  | 'tooFast'
+  // mondes et avant-postes
+  | 'noActivity'
+  | 'cantSettle'
+  | 'outpostTaken'
+  | 'outpostMax';
 
 export class GameError extends Error {
   constructor(
@@ -236,10 +242,54 @@ function newHero(c: HeroConfig): Hero {
     gear: {},
     missions: [],
     kos: 0,
+    found: [],
   };
   h.hp = maxHp(h);
   return h;
 }
+
+// ---------------------------------------------------------------- mondes et avant-postes
+
+/** Avant-postes de la partie (vide pour une partie enregistrée avant leur arrivée). */
+export const outpostsOf = (s: GameState): Record<string, Outpost> => s.outposts ?? {};
+
+/** L'avant-poste de ce héros sur ce système, s'il en a un. */
+function ownOutpost(s: GameState, seat: number, system: string): Outpost | null {
+  const o = outpostsOf(s)[system];
+  return o && o.seat === seat ? o : null;
+}
+
+/** Le héros profite ici du bonus de son avant-poste. */
+export function hasPerk(s: GameState, seat: number, system: string, perk: string): boolean {
+  return !!ownOutpost(s, seat, system) && WORLDS[system]?.perk === perk;
+}
+
+/** Marché accessible : en station, ou sur son avant-poste marchand. */
+export const canShopAt = (s: GameState, seat: number, system: string) =>
+  SYSTEM_BY_ID[system].kind === 'station' || hasPerk(s, seat, system, 'market');
+
+/** Repos complet (PV et Résolution) : en station, ou sur son avant-poste de soins. */
+export const fullRestAt = (s: GameState, seat: number, system: string) =>
+  SYSTEM_BY_ID[system].kind === 'station' || hasPerk(s, seat, system, 'heal');
+
+/** À l'abri des crises : en station, ou sur l'un de ses avant-postes. */
+export const shelteredAt = (s: GameState, seat: number, system: string) =>
+  SYSTEM_BY_ID[system].kind === 'station' || !!ownOutpost(s, seat, system);
+
+/**
+ * Fondation ou amélioration possible ici : niveau visé et coût, ou `null`
+ * (pas une planète, planète d'un autre héros, avant-poste au maximum).
+ */
+export function settleOffer(s: GameState, seat: number, system: string): { level: 1 | 2 | 3; cost: number } | null {
+  if (!WORLDS[system]?.perk) return null;
+  const o = outpostsOf(s)[system];
+  if (o && (o.seat !== seat || o.level >= OUTPOST_MAX)) return null;
+  const level = (o ? o.level + 1 : 1) as 1 | 2 | 3;
+  return { level, cost: OUTPOST_COST[level] };
+}
+
+/** Crédits rapportés par un avant-poste à chaque tour de table. */
+export const outpostIncome = (system: string, o: Outpost) => o.level + (WORLDS[system]?.perk === 'credits' ? 1 : 0);
 
 /** Ce héros n'a encore rien fait : on peut encore changer sa classe et son espèce. */
 export function heroUntouched(s: GameState, seat: number): boolean {
@@ -277,6 +327,7 @@ export function createGame(configs: HeroConfig[], seed = Date.now()): GameState 
     encounterDeck: [],
     encounterDiscard: [],
     explored: [HOME],
+    outposts: {},
     events: [],
     eventSeq: 0,
     results: null,
@@ -430,12 +481,24 @@ function finish(s: GameState) {
 function endRound(s: GameState) {
   s.threat += 1;
   pushEvent(s, { seat: 0, kind: 'round', amount: s.threat });
+  // les avant-postes rapportent à leur propriétaire
+  const income = new Map<number, number>();
+  for (const [system, o] of Object.entries(outpostsOf(s))) {
+    const h = s.players[o.seat];
+    income.set(o.seat, (income.get(o.seat) ?? 0) + outpostIncome(system, o));
+    if (WORLDS[system].perk === 'xp') gainXp(s, o.seat, 1);
+    if (WORLDS[system].perk === 'recharge') h.resolve = Math.min(maxResolve(h), h.resolve + 1);
+  }
+  for (const [seat, amount] of income) {
+    s.players[seat].credits += amount;
+    pushEvent(s, { seat, kind: 'income', amount });
+  }
   for (const level of CRISES) {
     if (s.threat < level || s.crises.includes(level)) continue;
     s.crises.push(level);
     pushEvent(s, { seat: 0, kind: 'crisis', amount: CRISIS_DAMAGE[level] });
     s.players.forEach((h, seat) => {
-      if (SYSTEM_BY_ID[h.pos].kind !== 'station') hurt(s, seat, CRISIS_DAMAGE[level]);
+      if (!shelteredAt(s, seat, h.pos)) hurt(s, seat, CRISIS_DAMAGE[level]);
     });
     if (level === CRISES[1]) {
       placeMission(s, BOSS.id);
@@ -457,6 +520,9 @@ export function applyAction(state: GameState, seat: number, action: Action): Gam
   if (state.phase === 'finished') fail('finished', 'La partie est terminée.');
   if (seat !== state.current) fail('notYourTurn', "Ce n'est pas votre tour.");
   const s: GameState = structuredClone(state);
+  // parties enregistrées avant les mondes : champs absents
+  s.outposts ??= {};
+  for (const p of s.players) p.found ??= [];
   const h = s.players[seat];
   const here = SYSTEM_BY_ID[h.pos];
 
@@ -469,11 +535,18 @@ export function applyAction(state: GameState, seat: number, action: Action): Gam
       // entrer dans une nébuleuse met fin au déplacement
       if (SYSTEM_BY_ID[action.to].kind === 'nebula') s.movesLeft = 0;
       pushEvent(s, { seat, kind: 'move', system: action.to, amount: d });
+      // monde hostile : une armure protège du danger à l'arrivée
+      const hazard = WORLDS[action.to]?.hazard;
+      if (hazard && !h.gear.armor) {
+        pushEvent(s, { seat, kind: 'hazard', system: action.to, amount: hazard });
+        hurt(s, seat, hazard);
+        if (h.pos !== action.to) s.movesLeft = 0; // évacué vers une station
+      }
       return s;
     }
 
     case 'buy': {
-      if (here.kind !== 'station') fail('notStation', 'Il faut être dans une station.');
+      if (!canShopAt(s, seat, h.pos)) fail('notStation', 'Il faut être dans une station.');
       const itemId = s.market[action.index];
       if (itemId === null || itemId === undefined) fail('noItem', "Pas d'objet à cet emplacement.");
       const cost = itemCost(h, itemId);
@@ -535,7 +608,7 @@ export function applyAction(state: GameState, seat: number, action: Action): Gam
 
     case 'rest': {
       const before = h.hp;
-      if (here.kind === 'station') {
+      if (fullRestAt(s, seat, h.pos)) {
         h.hp = maxHp(h);
         h.resolve = maxResolve(h);
       } else heal(h, h.classId === 'mystic' ? maxHp(h) : FIELD_REST);
@@ -546,6 +619,38 @@ export function applyAction(state: GameState, seat: number, action: Action): Gam
     case 'wait':
       pushEvent(s, { seat, kind: 'wait' });
       break;
+
+    case 'activity': {
+      const activity = WORLDS[h.pos]?.activities[action.index];
+      if (!activity) fail('noActivity', 'Aucune activité de ce nom ici.');
+      if (action.boost && h.resolve <= 0) fail('noResolve', 'Plus de points de Résolution.');
+      if (action.boost) h.resolve -= 1;
+      const roll = resolveCheck(s, h, [activity.stat], activity.dc, !!action.boost);
+      // première réussite de cette activité : une découverte pour le héros
+      const first = roll.success && !h.found.includes(activity.id);
+      if (first) {
+        h.found.push(activity.id);
+        h.renown += 1;
+      }
+      pushEvent(s, { seat, kind: 'activity', activityId: activity.id, system: h.pos, roll, ...(first ? { amount: 1 } : {}) });
+      applyOutcome(s, seat, roll.success ? activity.success : activity.failure);
+      break;
+    }
+
+    case 'settle': {
+      if (!WORLDS[h.pos]?.perk) fail('cantSettle', 'Seules les planètes accueillent des avant-postes.');
+      const owner = outpostsOf(s)[h.pos];
+      if (owner && owner.seat !== seat) fail('outpostTaken', 'Cette planète a déjà un avant-poste.');
+      const offer = settleOffer(s, seat, h.pos);
+      if (!offer) fail('outpostMax', 'Cet avant-poste est déjà au niveau maximum.');
+      if (h.credits < offer.cost) fail('noCredits', 'Crédits insuffisants.');
+      h.credits -= offer.cost;
+      s.outposts[h.pos] = { seat, level: offer.level };
+      h.renown += OUTPOST_RENOWN[offer.level];
+      pushEvent(s, { seat, kind: 'settle', system: h.pos, amount: offer.level });
+      // construire, comme acheter, ne termine pas le tour
+      return s;
+    }
 
     default:
       fail('unknownAction', 'Action inconnue.');
