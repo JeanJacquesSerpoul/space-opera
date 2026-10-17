@@ -5,6 +5,7 @@ import { MISSION_REWARD } from '../../shared/engine';
 import type { MessageKey } from '../../shared/i18n';
 import type { GameEvent, GameState, Outcome } from '../../shared/types';
 import { systemName, useT } from '../lib/i18n';
+import { playSfx } from '../lib/sfx';
 import { PLAYER_FILL, STAT_ICON } from '../lib/theme';
 
 /** Résumé compact d'un gain ou d'une perte : « +2 ★ · −4 ♥ ». */
@@ -43,16 +44,18 @@ export function DiceOverlay({
 
   useEffect(() => {
     let n = 0;
+    playSfx('dice');
     const timer = setInterval(() => {
       n += 1;
       if (n >= 12) {
         clearInterval(timer);
         setFace(roll.d20);
         setSettled(true);
+        playSfx(roll.success ? 'success' : 'fail');
       } else setFace(1 + Math.floor(Math.random() * 20));
     }, 60);
     return () => clearInterval(timer);
-  }, [roll.d20]);
+  }, [roll.d20, roll.success]);
 
   useEffect(() => {
     if (!settled || autoClose === undefined) return;

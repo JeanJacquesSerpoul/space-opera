@@ -4,13 +4,16 @@ import { createPortal } from 'react-dom';
 import { CLASSES, CLASS_IDS, SPECIES_IDS, STATS } from '../../shared/data';
 import { heroUntouched } from '../../shared/engine';
 import type { MessageKey } from '../../shared/i18n';
-import type { HeroChoice, SeatInfo } from '../../shared/online';
+import { type HeroChoice, REACTIONS, type SeatInfo } from '../../shared/online';
 import type { HeroConfig } from '../../shared/types';
 import { errorText, useT } from '../lib/i18n';
-import { type RoomClient, openRoom, roomLink } from '../lib/online';
+import { type ReactionEvent, type RoomClient, openRoom, roomLink } from '../lib/online';
 import { saveName, savedName } from '../lib/prefs';
+import { playSfx } from '../lib/sfx';
+import { canAskNotifications, notificationsOn } from '../lib/turnAlert';
 import { PLAYER_FILL, STAT_ICON } from '../lib/theme';
 import { Starfield } from './Brand';
+import { useConfirm } from './ConfirmDialog';
 import { Dialog } from './Dialog';
 import { Game } from './Game';
 
@@ -248,6 +251,25 @@ function HeroPicker({ hero, locked, onChange }: { hero: HeroConfig; locked: bool
   );
 }
 
+/** Demande la permission de prévenir par une notification système quand c'est son tour. */
+function NotifyButton() {
+  const { t } = useT();
+  const [, refresh] = useState(0);
+  if (notificationsOn()) return <p className="muted small">🔔 {t('room.notifyOn')}</p>;
+  if (!canAskNotifications()) return null;
+  return (
+    <button
+      type="button"
+      className="btn small"
+      onClick={() => {
+        void Notification.requestPermission().then(() => refresh((n) => n + 1));
+      }}
+    >
+      🔔 {t('room.notify')}
+    </button>
+  );
+}
+
 /** Place d'invité que l'hôte peut confier à l'ordinateur : jamais prise, ou invité parti. */
 export const canGiveToBot = (room: RoomClient, seat: SeatInfo | undefined) =>
   room.role === 'host' && seat?.kind === 'remote' && !seat.connected && room.state.phase !== 'finished';
@@ -256,28 +278,33 @@ export const canGiveToBot = (room: RoomClient, seat: SeatInfo | undefined) =>
 export function ToBotButton({ room, seat, className = '' }: { room: RoomClient; seat: number; className?: string }) {
   const { t } = useT();
   const [busy, setBusy] = useState(false);
+  const [confirmEl, ask] = useConfirm();
   const name = room.state.players[seat].name;
   const give = async () => {
-    if (!confirm(t('room.toBotConfirm', { name }))) return;
+    const ok = await ask({ title: t('room.toBot'), message: t('room.toBotConfirm', { name }), icon: '🤖' });
+    if (!ok) return;
     setBusy(true);
     try {
       await room.giveToBot(seat);
     } catch (e) {
-      alert(errorText(e, t));
+      await ask({ title: errorText(e, t), icon: '⚠', notice: true });
     } finally {
       setBusy(false);
     }
   };
   return (
-    <button
-      type="button"
-      className={`btn small ${className}`}
-      disabled={busy}
-      onClick={give}
-      aria-label={`${t('room.toBot')} : ${name}`}
-    >
-      🤖 {t('room.toBot')}
-    </button>
+    <>
+      {confirmEl}
+      <button
+        type="button"
+        className={`btn small ${className}`}
+        disabled={busy}
+        onClick={give}
+        aria-label={`${t('room.toBot')} : ${name}`}
+      >
+        🤖 {t('room.toBot')}
+      </button>
+    </>
   );
 }
 
@@ -343,6 +370,88 @@ function SeatRow({
     >
       {content}
     </button>
+  );
+}
+
+/** Réactions rapides : un bouton de la barre du haut ouvre les six réactions. */
+export function ReactButton({ room }: { room: RoomClient }) {
+  const { t } = useT();
+  const [open, setOpen] = useState(false);
+  useRoom(room);
+  if (!room.me) return null;
+  const send = (emoji: (typeof REACTIONS)[number]) => {
+    setOpen(false);
+    room.react(emoji).catch(() => {
+      /* trop rapide ou hôte injoignable : la réaction est simplement perdue */
+    });
+  };
+  return (
+    <div className="react-picker">
+      <button
+        type="button"
+        className="btn ghost small"
+        aria-label={t('room.react')}
+        title={t('room.react')}
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+      >
+        😀
+      </button>
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            className="react-menu"
+            role="menu"
+            initial={{ opacity: 0, y: -6, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+          >
+            {REACTIONS.map((r) => (
+              <button key={r} type="button" role="menuitem" onClick={() => send(r)} aria-label={t('room.sendReaction', { r })}>
+                {r}
+              </button>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+/** Bulles des réactions reçues, sur la carte, avec le nom et la couleur du héros. */
+export function ReactionBubbles({ room }: { room: RoomClient }) {
+  const [list, setList] = useState<ReactionEvent[]>([]);
+  useEffect(
+    () =>
+      room.onReaction((r) => {
+        if (r.seat !== room.me?.seat) playSfx('react');
+        setList((l) => [...l, r].slice(-5));
+        setTimeout(() => setList((l) => l.filter((x) => x.id !== r.id)), 3000);
+      }),
+    [room],
+  );
+  return (
+    <div className="reactions" aria-live="polite">
+      <AnimatePresence>
+        {list.map((r) => {
+          const hero = room.state.players[r.seat];
+          return (
+            <motion.div
+              key={r.id}
+              className="reaction"
+              style={{ '--c': PLAYER_FILL[hero.color] } as React.CSSProperties}
+              initial={{ opacity: 0, y: 20, scale: 0.6 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ type: 'spring', stiffness: 380, damping: 18 }}
+            >
+              <span className="reaction-emoji">{r.emoji}</span>
+              <span className="reaction-name">{hero.name}</span>
+            </motion.div>
+          );
+        })}
+      </AnimatePresence>
+    </div>
   );
 }
 
@@ -414,6 +523,7 @@ export function RoomSheet({ room, onClose }: { room: RoomClient; onClose: () => 
         )}
       </div>
       <p className="muted small">{room.drivesBots ? t('room.hintPeer') : t('room.hint')}</p>
+      <NotifyButton />
       {room.seats.some((s) => canGiveToBot(room, s)) && <p className="muted small">{t('room.toBotHint')}</p>}
       <ul className="seat-list">
         {room.seats.map((s) => (

@@ -38,13 +38,30 @@ export type RoomEvent =
   | { t: 'room'; code: string; state: GameState; seats: SeatInfo[] }
   | { t: 'state'; state: GameState; seats: SeatInfo[] }
   | { t: 'seats'; seats: SeatInfo[] }
+  | { t: 'react'; seat: number; emoji: Reaction; id: number }
   | { t: 'error'; code: string; message: string };
+
+/** Réactions rapides que les joueurs d'un salon s'envoient. */
+export const REACTIONS = ['👍', '👏', '😂', '😱', '🎲', 'GG'] as const;
+export type Reaction = (typeof REACTIONS)[number];
+export const isReaction = (x: unknown): x is Reaction => REACTIONS.includes(x as Reaction);
+/** Délai minimal entre deux réactions d'une même place (ms). */
+export const REACT_COOLDOWN = 1000;
+
+/** Une place envoie une réaction : il faut un jeton valable et une réaction connue. Renvoie le siège. */
+export function checkReaction(meta: RoomMeta, token: string | undefined, emoji: unknown): number {
+  const seat = seatOfToken(meta, token);
+  if (seat < 0) throw new GameError('badToken', 'Vous ne contrôlez aucun héros de ce salon.');
+  if (!isReaction(emoji)) throw new GameError('unknownAction', 'Réaction inconnue.');
+  return seat;
+}
 
 /** Requêtes d'un invité vers l'hôte en pair-à-pair (chaque requête attend une réponse de même `id`). */
 export type PeerRequest =
   | { t: 'hello'; id: number; token?: string }
   | { t: 'join'; id: number; seat: number; name: string; token?: string; hero?: HeroChoice }
-  | { t: 'act'; id: number; token: string; seat: number; action: Action };
+  | { t: 'act'; id: number; token: string; seat: number; action: Action }
+  | { t: 'react'; id: number; token: string; emoji: Reaction };
 
 /** Réponses de l'hôte, en plus des événements diffusés à tous. */
 export type PeerReply =

@@ -9,6 +9,8 @@
 }
 
 .topbar {
+  /* au-dessus de la carte : le menu des réactions déborde dessous */
+  z-index: 10;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -92,6 +94,28 @@
   border-left: 1px solid var(--line);
 }
 
+/* onglets du tiroir (téléphone) ; sur ordinateur, panneaux empilés et journal dans sa fenêtre */
+.side-tabs,
+.side-pane[data-pane="log"] {
+  display: none;
+}
+
+.side-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.side-pane:empty {
+  display: none;
+}
+
+.wait-note {
+  display: none;
+  margin: 0;
+  text-align: center;
+}
+
 .turn-banner {
   position: absolute;
   top: 10px;
@@ -140,28 +164,99 @@
 }
 
 @media (max-width: 860px) {
-  .game {
-    height: auto;
-    min-height: 100dvh;
-    overflow: visible;
-  }
-
+  /* téléphone : carte plein écran, tiroir d'actions en bas */
   .game-body {
     grid-template-columns: 1fr;
-  }
-
-  .map-area {
-    /* la carte (1000 × 650) plus une marge pour le bandeau du tour */
-    aspect-ratio: 4 / 3;
-    max-height: 60vh;
-    position: sticky;
-    top: 0;
-    z-index: 2;
+    grid-template-rows: minmax(0, 1fr) auto;
   }
 
   .side {
     border-left: 0;
-    overflow: visible;
+    border-top: 1px solid var(--line);
+    border-radius: 18px 18px 0 0;
+    height: 44dvh;
+    padding: 0 12px max(12px, env(safe-area-inset-bottom));
+    box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.45);
+    transition: height 0.25s ease;
+  }
+
+  .side.open {
+    height: 78dvh;
+  }
+
+  .side-tabs {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 4px;
+    margin: 0 -12px;
+    padding: 0 8px 6px;
+    background: rgba(10, 15, 36, 0.98);
+  }
+
+  .drawer-handle {
+    grid-column: 1 / -1;
+    display: grid;
+    place-items: center;
+    height: 18px;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+  }
+
+  .drawer-handle i {
+    width: 44px;
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(143, 156, 196, 0.6);
+  }
+
+  .side-tabs [role="tab"] {
+    position: relative;
+    padding: 8px 4px;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    background: transparent;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--muted);
+    cursor: pointer;
+  }
+
+  .side-tabs [role="tab"].on {
+    color: var(--text);
+    border-bottom-color: var(--accent);
+  }
+
+  .tab-dot {
+    position: absolute;
+    top: 6px;
+    right: 18%;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--good);
+    box-shadow: 0 0 8px var(--good);
+  }
+
+  /* un seul panneau à la fois */
+  .side[data-tab="actions"] .side-pane:not([data-pane="actions"]),
+  .side[data-tab="hero"] .side-pane:not([data-pane="hero"]),
+  .side[data-tab="crew"] .side-pane:not([data-pane="crew"]),
+  .side[data-tab="log"] .side-pane:not([data-pane="log"]) {
+    display: none;
+  }
+
+  .side[data-tab="log"] .side-pane[data-pane="log"] {
+    display: block;
+  }
+
+  /* le tiroir n'est jamais vide : il dit où apparaîtront les actions */
+  .wait-note {
+    display: block;
+    padding: 12px 0;
   }
 
   .topbar .goal,
@@ -170,12 +265,18 @@
   }
 
   .threat-track i {
-    width: 5px;
+    width: 6px;
+    height: 16px;
   }
 
   .turn-banner {
     top: 6px;
+    max-width: calc(100% - 16px);
     font-size: 0.85rem;
     padding: 4px 12px;
+  }
+
+  .toasts {
+    bottom: 8px;
   }
 }

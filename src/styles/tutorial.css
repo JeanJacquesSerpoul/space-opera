@@ -1,0 +1,81 @@
+/* ——— partie guidée ——— */
+
+.coach {
+  position: absolute;
+  top: 52px;
+  left: 12px;
+  z-index: 5;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: min(360px, calc(100% - 24px));
+}
+
+.coach-avatar {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+  background: var(--panel-solid);
+  font-size: 1.4rem;
+  cursor: pointer;
+  box-shadow: 0 0 14px rgba(54, 227, 255, 0.4);
+}
+
+.coach-body {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(13, 20, 48, 0.96);
+  border: 1px solid var(--accent);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+.coach-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.coach-head b {
+  color: var(--accent);
+}
+
+.coach-head span {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.coach-body p {
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+
+.coach-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+@media (max-width: 860px) {
+  /* en bas de la carte, au-dessus du tiroir : la bulle ne cache pas les systèmes à toucher */
+  .coach {
+    top: auto;
+    bottom: 8px;
+    left: 8px;
+    right: 8px;
+    max-width: none;
+  }
+
+  .coach-body {
+    flex: 1;
+  }
+
+  .coach-body p {
+    font-size: 0.82rem;
+  }
+}

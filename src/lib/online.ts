@@ -2,12 +2,15 @@ import type { DataConnection, Peer } from 'peerjs';
 import {
   type HeroChoice,
   type PeerReply,
+  REACT_COOLDOWN,
+  type Reaction,
   type PeerRequest,
   type RoomEvent,
   type RoomIdentity,
   type RoomMeta,
   type SeatInfo,
   authorize,
+  checkReaction,
   joinSeat,
   seatInfos,
   seatOfToken,
@@ -50,7 +53,17 @@ export interface RoomClient {
   giveToBot(seat: number): Promise<void>;
   /** Prévenu à chaque changement (partie, places, connexion). */
   subscribe(fn: () => void): () => void;
+  /** Envoie une réaction rapide aux autres appareils (elle revient aussi à celui-ci). */
+  react(emoji: Reaction): Promise<void>;
+  /** Prévenu à chaque réaction reçue. */
+  onReaction(fn: (r: ReactionEvent) => void): () => void;
   close(): void;
+}
+
+export interface ReactionEvent {
+  seat: number;
+  emoji: Reaction;
+  id: number;
 }
 
 // ——— identités gardées dans le navigateur (pour revenir dans son salon) ———
@@ -263,6 +276,7 @@ abstract class BaseRoom {
   lostSeat = false;
   protected closed = false;
   private listeners = new Set<() => void>();
+  private reactionListeners = new Set<(r: ReactionEvent) => void>();
 
   constructor(
     readonly code: string,
@@ -273,6 +287,15 @@ abstract class BaseRoom {
 
   get role(): 'host' | 'guest' {
     return this.me?.role ?? 'guest';
+  }
+
+  onReaction(fn: (r: ReactionEvent) => void) {
+    this.reactionListeners.add(fn);
+    return () => void this.reactionListeners.delete(fn);
+  }
+
+  protected emitReaction(r: ReactionEvent) {
+    for (const fn of this.reactionListeners) fn(r);
   }
 
   subscribe(fn: () => void) {
@@ -351,7 +374,8 @@ class ServerRoom extends BaseRoom implements RoomClient {
       else if (e.t === 'seats') {
         this.setSeats(e.seats);
         this.emit();
-      } else if (e.t === 'error') {
+      } else if (e.t === 'react') this.emitReaction(e);
+      else if (e.t === 'error') {
         this.fatal = e.code;
         this.emit();
       }
@@ -388,6 +412,14 @@ class ServerRoom extends BaseRoom implements RoomClient {
 
   async bot() {
     /* le serveur fait jouer les ordinateurs */
+  }
+
+  async react(emoji: Reaction) {
+    if (!this.me) throw failure('badToken');
+    await call<void>(`/api/rooms/${this.code}/react`, {
+      method: 'POST',
+      body: JSON.stringify({ token: this.me.token, emoji }),
+    });
   }
 
   async giveToBot(seat: number) {
@@ -452,6 +484,23 @@ class PeerHost extends BaseRoom implements RoomClient {
     this.seats = seatInfos(this.meta, this.state, this.connected());
   }
 
+  private lastReact = new Map<number, number>();
+  private reactSeq = 0;
+
+  /** Diffuse une réaction (de l'hôte ou d'un invité) à tous, hôte compris. */
+  private shareReaction(seat: number, emoji: Reaction) {
+    const now = Date.now();
+    if (now - (this.lastReact.get(seat) ?? 0) < REACT_COOLDOWN) throw failure('tooFast');
+    this.lastReact.set(seat, now);
+    const r: ReactionEvent = { seat, emoji, id: ++this.reactSeq };
+    for (const conn of this.conns.keys()) this.send(conn, { t: 'react', ...r });
+    this.emitReaction(r);
+  }
+
+  async react(emoji: Reaction) {
+    this.shareReaction(this.me!.seat, emoji);
+  }
+
   private send(conn: DataConnection, msg: PeerReply) {
     if (conn.open) conn.send(msg);
   }
@@ -513,6 +562,9 @@ class PeerHost extends BaseRoom implements RoomClient {
         this.refreshSeats();
         this.send(conn, { t: 'ok', id: req.id, state: this.state, seats: this.seats, token: joined.token, seat: req.seat });
         this.broadcast();
+      } else if (req.t === 'react') {
+        this.shareReaction(checkReaction(this.meta, req.token, req.emoji), req.emoji);
+        this.send(conn, { t: 'ok', id: req.id, state: this.state, seats: this.seats });
       } else if (req.t === 'act') {
         authorize(this.meta, req.token, req.seat);
         this.state = localApi.actRoom(this.gameId!, req.seat, req.action).state;
@@ -641,6 +693,7 @@ class PeerGuest extends BaseRoom implements RoomClient {
       if (msg.t === 'ok') p.resolve(msg);
       else p.reject(failure(msg.code, msg.message));
     } else if (msg.t === 'state' || msg.t === 'room') this.setState(msg.state, msg.seats);
+    else if (msg.t === 'react') this.emitReaction(msg);
     else if (msg.t === 'seats') {
       this.setSeats(msg.seats);
       this.emit();
@@ -676,6 +729,11 @@ class PeerGuest extends BaseRoom implements RoomClient {
 
   async giveToBot() {
     throw failure('notHost');
+  }
+
+  async react(emoji: Reaction) {
+    if (!this.me) throw failure('badToken');
+    await this.request({ t: 'react', id: 0, token: this.me.token, emoji });
   }
 
   close() {

@@ -239,7 +239,8 @@ select {
   }
 }
 
-.screen > *:not(.starfield):not(.backdrop) {
+/* :where() garde une spécificité faible : un écran peut placer ses propres couches */
+.screen > :where(:not(.starfield):not(.backdrop)) {
   position: relative;
   z-index: 1;
 }

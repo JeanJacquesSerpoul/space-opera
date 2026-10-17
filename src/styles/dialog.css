@@ -282,3 +282,44 @@
   background: rgba(255, 255, 255, 0.03);
   border-radius: 4px;
 }
+
+/* ——— confirmations ——— */
+
+.confirm-backdrop {
+  z-index: 90;
+}
+
+.dialog.confirm {
+  width: min(400px, 100%);
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  text-align: center;
+}
+
+.dialog.confirm h2 {
+  font-size: 1.05rem;
+}
+
+.dialog.confirm p {
+  margin: 0;
+  line-height: 1.45;
+}
+
+.confirm-icon {
+  font-size: 2rem;
+  filter: drop-shadow(0 0 10px rgba(54, 227, 255, 0.4));
+}
+
+.confirm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.btn.primary.danger {
+  background: linear-gradient(135deg, #ff5c6c, #c2185b);
+  box-shadow: 0 4px 18px rgba(255, 92, 108, 0.35);
+}

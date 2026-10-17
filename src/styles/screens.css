@@ -282,3 +282,143 @@
   padding: 12px 0;
   background: linear-gradient(transparent, var(--bg) 35%);
 }
+
+/* ——— fiche de joueur ——— */
+
+.leader-name {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  text-decoration: underline dotted rgba(143, 156, 196, 0.6);
+  text-underline-offset: 3px;
+}
+
+.leader-name:hover {
+  color: var(--accent);
+}
+
+.profile h3 {
+  margin: 4px 0 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.profile-figures {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.profile-figures div {
+  display: grid;
+  gap: 2px;
+  padding: 8px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.03);
+  text-align: center;
+}
+
+.profile-figures b {
+  font-family: var(--font-title);
+  font-size: 1.1rem;
+  color: var(--accent);
+}
+
+.profile-figures small {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.profile-classes,
+.profile-recent {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.profile-classes li {
+  display: grid;
+  grid-template-columns: auto 7em 1fr auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.profile-class-name {
+  font-size: 0.85rem;
+}
+
+.profile-bar {
+  height: 8px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.profile-bar i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--accent2));
+}
+
+.profile-chart {
+  margin: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.profile-chart svg {
+  width: 100%;
+  height: auto;
+}
+
+.profile-chart polyline {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+
+.profile-chart circle {
+  fill: var(--panel-solid);
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+
+.profile-chart circle.won {
+  fill: var(--warn);
+  stroke: var(--warn);
+}
+
+.profile-recent li {
+  display: grid;
+  grid-template-columns: 6.5em 1fr auto 3em;
+  gap: 8px;
+  font-size: 0.85rem;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.profile-recent li span:last-child {
+  text-align: right;
+}
+
+@media (max-width: 480px) {
+  .profile-figures {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .profile-classes li {
+    grid-template-columns: auto 1fr auto;
+  }
+
+  .profile-bar {
+    display: none;
+  }
+}

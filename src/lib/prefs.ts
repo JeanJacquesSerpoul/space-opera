@@ -14,6 +14,8 @@ export interface Prefs {
   dice: boolean;
   /** Voix off de la présentation animée. */
   introVoice: boolean;
+  /** Effets sonores. */
+  sfx: boolean;
 }
 
 const KEYS: Record<keyof Prefs, string> = {
@@ -21,12 +23,13 @@ const KEYS: Record<keyof Prefs, string> = {
   botSpeed: 'so.botSpeed',
   dice: 'so.dice',
   introVoice: 'so.introVoice',
+  sfx: 'so.sfx',
 };
 
 const reducedMotion = () => typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
 function load(): Prefs {
-  const prefs: Prefs = { lang: detectLang(), botSpeed: 'normal', dice: !reducedMotion(), introVoice: true };
+  const prefs: Prefs = { lang: detectLang(), botSpeed: 'normal', dice: !reducedMotion(), introVoice: true, sfx: true };
   try {
     const lang = localStorage.getItem(KEYS.lang);
     if (lang === 'fr' || lang === 'en') prefs.lang = lang;
@@ -36,6 +39,8 @@ function load(): Prefs {
     if (dice !== null) prefs.dice = dice === '1';
     const voice = localStorage.getItem(KEYS.introVoice);
     if (voice !== null) prefs.introVoice = voice === '1';
+    const sfx = localStorage.getItem(KEYS.sfx);
+    if (sfx !== null) prefs.sfx = sfx === '1';
   } catch {
     /* stockage indisponible : valeurs par défaut */
   }

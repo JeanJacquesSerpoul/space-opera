@@ -1,4 +1,4 @@
-import { motion } from 'motion/react';
+import { AnimatePresence, motion } from 'motion/react';
 import { useEffect, useState } from 'react';
 import { BOT_LEVELS } from '../../shared/bot';
 import { CLASSES, CLASS_IDS, SPECIES_IDS, STATS } from '../../shared/data';
@@ -12,6 +12,8 @@ import { forgetIdentity, listRooms } from '../lib/online';
 import { saveName, savedName } from '../lib/prefs';
 import { PLAYER_COLORS, PLAYER_FILL, STAT_ICON } from '../lib/theme';
 import { Brand, Starfield } from './Brand';
+import { useConfirm } from './ConfirmDialog';
+import { ProfileDialog } from './Profile';
 
 // ---------------------------------------------------------------- accueil
 
@@ -21,12 +23,14 @@ export function Home({
   onOpen,
   onRoom,
   onIntro,
+  onTutorial,
   onRules,
   onSettings,
 }: {
   onNew: () => void;
   onNewRoom: () => void;
   onIntro: () => void;
+  onTutorial: () => Promise<void>;
   onOpen: (id: number) => void;
   onRoom: (code: string) => void;
   onRules: () => void;
@@ -36,6 +40,8 @@ export function Home({
   const [games, setGames] = useState<GameSummary[] | null>(null);
   const [leaders, setLeaders] = useState<LeaderRow[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [confirmEl, ask] = useConfirm();
+  const [profile, setProfile] = useState<string | null>(null);
 
   const refresh = () => {
     api
@@ -54,13 +60,17 @@ export function Home({
   useEffect(refresh, []);
 
   const remove = async (id: number) => {
-    if (!confirm(t('home.deleteConfirm'))) return;
+    if (!(await ask({ title: t('home.deleteConfirm'), icon: '🗑', confirmLabel: t('home.delete'), danger: true }))) return;
     await api.deleteGame(id);
     refresh();
   };
 
   return (
     <div className="screen home">
+      {confirmEl}
+      <AnimatePresence>
+        {profile && <ProfileDialog key="profile" name={profile} onClose={() => setProfile(null)} />}
+      </AnimatePresence>
       <Starfield />
       <motion.header className="home-hero" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
         <Brand />
@@ -71,6 +81,15 @@ export function Home({
           </button>
           <button type="button" className="btn" onClick={onIntro}>
             {t('home.intro')}
+          </button>
+          <button
+            type="button"
+            className="btn"
+            onClick={() => {
+              onTutorial().catch((e) => setError(errorText(e, t)));
+            }}
+          >
+            {t('home.tutorial')}
           </button>
           <button type="button" className="btn" onClick={onRules}>
             {t('home.rules')}
@@ -137,8 +156,15 @@ export function Home({
                 {leaders.slice(0, 10).map((r) => (
                   <tr key={r.name}>
                     <td>
-                      {r.is_bot ? '🤖 ' : ''}
-                      {r.name}
+                      <button
+                        type="button"
+                        className="leader-name"
+                        onClick={() => setProfile(r.name)}
+                        title={t('profile.open', { name: r.name })}
+                      >
+                        {r.is_bot ? '🤖 ' : ''}
+                        {r.name}
+                      </button>
                     </td>
                     <td>{r.games}</td>
                     <td>{r.wins}</td>
@@ -163,15 +189,24 @@ function OnlineRooms({ onRoom, onNewRoom }: { onRoom: (code: string) => void; on
   const { t, lang } = useT();
   const [code, setCode] = useState('');
   const [rooms, setRooms] = useState(listRooms);
+  const [confirmEl, ask] = useConfirm();
 
-  const forget = (room: string) => {
-    if (!confirm(t('home.forgetConfirm', { code: room }))) return;
+  const forget = async (room: string) => {
+    const ok = await ask({
+      title: t('home.forgetRoom', { code: room }),
+      message: t('home.forgetConfirm', { code: room }),
+      icon: '🌐',
+      confirmLabel: t('home.forget'),
+      danger: true,
+    });
+    if (!ok) return;
     forgetIdentity(room);
     setRooms(listRooms());
   };
 
   return (
     <section className="panel-card online-rooms">
+      {confirmEl}
       <h2>🌐 {t('home.rooms')}</h2>
       <div className="online-rooms-actions">
         <button type="button" className="btn primary" onClick={onNewRoom}>

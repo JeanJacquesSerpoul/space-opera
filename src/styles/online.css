@@ -252,6 +252,72 @@ button.seat-row:disabled {
   }
 }
 
+/* réactions rapides */
+.react-picker {
+  position: relative;
+}
+
+.react-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 30;
+  display: grid;
+  grid-template-columns: repeat(3, 44px);
+  gap: 4px;
+  padding: 6px;
+  border-radius: 14px;
+  background: var(--panel-solid);
+  border: 1px solid var(--line);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+.react-menu button {
+  height: 44px;
+  border: 0;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  font-size: 1.3rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.react-menu button:hover {
+  background: rgba(54, 227, 255, 0.18);
+}
+
+.reactions {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  z-index: 6;
+  display: grid;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.reaction {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px 4px 6px;
+  border-radius: 999px;
+  background: rgba(7, 11, 26, 0.85);
+  border: 1px solid var(--c);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--c) 40%, transparent);
+}
+
+.reaction-emoji {
+  font-size: 1.4rem;
+  font-weight: 800;
+}
+
+.reaction-name {
+  font-size: 0.85rem;
+  color: var(--c);
+  font-weight: 700;
+}
+
 /* fenêtre du salon */
 .link-status {
   margin: 0;

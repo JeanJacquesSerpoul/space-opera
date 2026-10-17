@@ -1,7 +1,8 @@
 import { motion } from 'motion/react';
-import { type ReactNode, useEffect, useRef } from 'react';
+import { type ReactNode, useRef } from 'react';
+import { useFocusTrap } from '../lib/useFocusTrap';
 
-/** Fenêtre modale animée : Échap ou un clic sur le fond la ferme. */
+/** Fenêtre modale animée : Échap ou un clic sur le fond la ferme ; le focus clavier y reste. */
 export function Dialog({
   title,
   onClose,
@@ -14,12 +15,7 @@ export function Dialog({
   className?: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
-    window.addEventListener('keydown', onKey);
-    ref.current?.focus();
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  useFocusTrap(ref, onClose);
 
   return (
     <motion.div className="backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose}>

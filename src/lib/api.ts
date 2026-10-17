@@ -1,3 +1,4 @@
+import type { PlayerProfile } from '../../shared/stats';
 import type { Action, GameState, HeroConfig } from '../../shared/types';
 import { localApi } from './localApi';
 
@@ -61,6 +62,7 @@ const httpApi = {
     call<GameResponse>(`/api/games/${id}/actions`, { method: 'POST', body: JSON.stringify({ seat, action }) }),
   bot: (id: number) => call<GameResponse>(`/api/games/${id}/bot`, { method: 'POST' }),
   stats: () => call<LeaderRow[]>('/api/stats'),
+  player: (name: string) => call<PlayerProfile>(`/api/players/${encodeURIComponent(name)}`),
 };
 
 /** Build statique (GitHub Pages) : pas de serveur, tout tourne dans le navigateur. */

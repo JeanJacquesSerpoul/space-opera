@@ -1,12 +1,14 @@
 import { LANGS, type MessageKey } from '../../shared/i18n';
 import { useT } from '../lib/i18n';
 import { BOT_SPEEDS, setPref, usePref } from '../lib/prefs';
+import { playSfx } from '../lib/sfx';
 import { Dialog } from './Dialog';
 
 export function SettingsDialog({ onClose }: { onClose: () => void }) {
   const { t, lang } = useT();
   const speed = usePref('botSpeed');
   const dice = usePref('dice');
+  const sfx = usePref('sfx');
   return (
     <Dialog title={t('settings.title')} onClose={onClose} className="settings">
       <div className="setting">
@@ -36,6 +38,24 @@ export function SettingsDialog({ onClose }: { onClose: () => void }) {
             {t('common.yes')}
           </button>
           <button type="button" className={!dice ? 'on' : ''} onClick={() => setPref('dice', false)}>
+            {t('common.no')}
+          </button>
+        </div>
+      </div>
+      <div className="setting">
+        <span>{t('settings.sfx')}</span>
+        <div className="seg">
+          <button
+            type="button"
+            className={sfx ? 'on' : ''}
+            onClick={() => {
+              setPref('sfx', true);
+              playSfx('success');
+            }}
+          >
+            {t('common.yes')}
+          </button>
+          <button type="button" className={!sfx ? 'on' : ''} onClick={() => setPref('sfx', false)}>
             {t('common.no')}
           </button>
         </div>

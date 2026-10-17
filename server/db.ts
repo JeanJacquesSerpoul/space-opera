@@ -125,6 +125,18 @@ export function listGames() {
   }));
 }
 
+/** Parties terminées où ce joueur avait un héros (fiche de joueur). */
+export function finishedGamesOf(name: string): { id: number; date: string; state: GameState }[] {
+  const rows = db
+    .prepare(
+      `SELECT g.id, g.state_json, g.updated_at FROM games g
+        WHERE g.status = 'finished' AND EXISTS (SELECT 1 FROM game_players gp WHERE gp.game_id = g.id AND gp.name = ?)
+        ORDER BY g.updated_at`,
+    )
+    .all(name) as { id: number; state_json: string; updated_at: string }[];
+  return rows.map((g) => ({ id: g.id, date: g.updated_at, state: JSON.parse(g.state_json) as GameState }));
+}
+
 export function leaderboard() {
   return db
     .prepare(

@@ -8,7 +8,10 @@ import { Home, Setup } from './components/Screens';
 import { SettingsDialog } from './components/Settings';
 import { api } from './lib/api';
 import { introSeen } from './lib/intro';
+import { currentT } from './lib/i18n';
 import { createRoom } from './lib/online';
+import { savedName } from './lib/prefs';
+import { startTutorial } from './components/Tutorial';
 
 // présentation chargée à la demande (première visite ou bouton de l'accueil)
 const IntroVideo = lazy(() => import('./components/IntroVideo').then((m) => ({ default: m.IntroVideo })));
@@ -48,6 +51,16 @@ export default function App() {
   const start = async (heroes: HeroConfig[], online: boolean) => {
     if (online) return go(`#/salon/${await createRoom(heroes)}`);
     const { id } = await api.createGame(heroes);
+    go(`#/partie/${id}`);
+  };
+
+  /** Partie guidée : une vraie partie contre un ordinateur facile, commentée pas à pas. */
+  const tutorial = async () => {
+    const { id } = await api.createGame([
+      { name: savedName(currentT()('setup.you')), isBot: false, color: 'cyan', classId: 'soldier', speciesId: 'human' },
+      { name: 'Nova', isBot: true, color: 'magenta', classId: 'mystic', speciesId: 'lumian', level: 'easy' },
+    ]);
+    startTutorial(id);
     go(`#/partie/${id}`);
   };
 
@@ -97,6 +110,7 @@ export default function App() {
           onNew={() => go('#/nouvelle')}
           onNewRoom={() => go('#/nouveau-salon')}
           onIntro={() => setShowIntro(true)}
+          onTutorial={tutorial}
           onOpen={(id) => go(`#/partie/${id}`)}
           onRoom={(code) => go(`#/salon/${code}`)}
           onRules={openRules}

@@ -1,6 +1,7 @@
 import { BOT_LEVELS, botAction } from '../../shared/bot';
 import { GameError, applyAction, createGame } from '../../shared/engine';
 import { type RoomMeta, newRoom } from '../../shared/online';
+import { playerProfile } from '../../shared/stats';
 import type { Action, GameState, HeroConfig } from '../../shared/types';
 import type { GameSummary, LeaderRow } from './api';
 
@@ -164,6 +165,16 @@ export const localApi = {
       const state = getStored(id).state;
       if (state.phase === 'finished' || !state.players[state.current].isBot) return { id, state };
       return update(id, applyAction(state, state.current, botAction(state)));
+    }),
+
+  player: (name: string) =>
+    wrap(() => {
+      const games = Object.entries(store().games)
+        .filter(([, g]) => g.state.phase === 'finished')
+        .map(([id, g]) => ({ id: Number(id), date: g.updated_at, state: g.state }));
+      const profile = playerProfile(name, games);
+      if (!profile) throw new GameError('notFound', 'Joueur introuvable.');
+      return profile;
     }),
 
   stats: () =>

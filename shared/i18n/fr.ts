@@ -10,6 +10,7 @@ export const fr = {
   'home.rules': 'Règles du jeu',
   'home.settings': 'Réglages',
   'home.intro': '🎬 Découvrir le jeu',
+  'home.tutorial': '🧭 Partie guidée',
   'home.saved': 'Parties sauvegardées',
   'home.none': 'Aucune partie pour l’instant.',
   'home.continue': 'Reprendre',
@@ -32,6 +33,7 @@ export const fr = {
   'home.asGuest': 'Invité',
   'home.forgetRoom': 'Oublier le salon {code}',
   'home.forgetConfirm': 'Oublier le salon {code} sur cet appareil ? Vous ne pourrez plus y reprendre votre place.',
+  'home.forget': 'Oublier',
 
   'leader.name': 'Héros',
   'leader.games': 'Parties',
@@ -40,6 +42,18 @@ export const fr = {
   'leader.best': 'Record',
   'leader.missions': 'Missions',
   'leader.empty': 'Terminez une partie pour entrer au Panthéon.',
+  'profile.title': 'Fiche de {name}',
+  'profile.open': 'Voir la fiche de {name}',
+  'profile.games': 'parties',
+  'profile.wins': 'victoires',
+  'profile.avg': 'score moyen',
+  'profile.best': 'meilleur score',
+  'profile.missions': 'missions réussies',
+  'profile.kos': 'mises hors de combat',
+  'profile.classes': 'Classes jouées',
+  'profile.classLine': '{n} partie · {wins} 🏆|{n} parties · {wins} 🏆',
+  'profile.chart': 'Score des {n} dernières parties',
+  'profile.recent': 'Dernières parties',
 
   'setup.title': 'Constituez votre équipage',
   'setup.heroes': 'Héros ({n}/5)',
@@ -110,6 +124,13 @@ export const fr = {
   'room.toBotHint': 'Un invité ne vient pas ou est parti ? Confiez sa place à l’ordinateur pour continuer.',
   'room.lostSeat': 'L’hôte a confié votre héros à l’ordinateur.',
   'room.heroLocked': 'Ce héros a déjà joué : sa classe et son espèce sont conservées.',
+  'turn.title': 'À vous',
+  'turn.notifyTitle': 'Space Opera : à vous de jouer !',
+  'turn.notifyBody': 'Votre héros attend vos ordres.',
+  'room.notify': 'Me prévenir quand c’est mon tour',
+  'room.notifyOn': 'Vous serez prévenu quand ce sera votre tour.',
+  'room.react': 'Réagir',
+  'room.sendReaction': 'Envoyer {r}',
 
   'intro.label': 'Présentation du jeu',
   'intro.header': '🎬 Découvrir le jeu',
@@ -164,6 +185,31 @@ export const fr = {
   'intro.c6':
     'Le premier héros à quarante de renommée mène l’équipage à la victoire. Mais si la menace déborde, la partie s’arrête : le meilleur score l’emporte.',
   'intro.c7': 'À vous de jouer ! Choisissez vos héros, seul, à plusieurs sur cet appareil ou en ligne. Bon voyage !',
+
+  'tutorial.step': 'Étape {n}/{total}',
+  'tutorial.next': 'Suivant',
+  'tutorial.quit': 'Quitter le guide',
+  'tutorial.finish': 'À moi de jouer !',
+  'tutorial.expand': 'Afficher le conseil',
+  'tutorial.collapse': 'Réduire le conseil',
+  'tutorial.jump.title': 'Sautez vers un système',
+  'tutorial.jump.text':
+    'Vous êtes à Nexus, une station. Les systèmes en surbrillance sont à votre portée : touchez-en un pour y sauter (jusqu’à 2 sauts par tour).',
+  'tutorial.act.title': 'Choisissez une action',
+  'tutorial.act.text':
+    'Dans le panneau d’actions : tentez une mission si un pin brille ici, explorez le système, reposez-vous, ou finissez le tour.',
+  'tutorial.dice.title': 'Le jet de d20',
+  'tutorial.dice.text':
+    'Chaque mission indique sa chance de réussite : d20 + votre caractéristique doit atteindre le DD. La Résolution ajoute +4 quand le jet compte.',
+  'tutorial.station.title': 'Les stations',
+  'tutorial.station.text':
+    'En station (hexagone ⬡), achetez de l’équipement au marché et reposez-vous pour récupérer PV et Résolution.',
+  'tutorial.threat.title': 'La menace du Fléau',
+  'tutorial.threat.text':
+    'En haut, la barre de menace monte à chaque tour et à chaque échec. Aux crises (5, 10, 15), les héros hors station sont blessés.',
+  'tutorial.end.title': 'Bon voyage, éclaireur !',
+  'tutorial.end.text':
+    'Atteignez 40 de renommée avant que la menace ne submerge le secteur. Les règles complètes sont dans « ? ».',
 
   'level.easy': 'Facile',
   'level.normal': 'Normal',
@@ -230,6 +276,14 @@ export const fr = {
   'game.loading': 'Chargement du secteur…',
   'game.passDevice': 'Passez l’appareil à {name}',
   'game.ready': 'Je suis prêt',
+  'game.panel': 'Panneau de jeu',
+  'game.tab.actions': 'Actions',
+  'game.tab.hero': 'Héros',
+  'game.tab.crew': 'Équipage',
+  'game.tab.log': 'Journal',
+  'game.drawerOpen': 'Agrandir le panneau',
+  'game.drawerClose': 'Réduire le panneau',
+  'game.waitActions': 'Vos actions apparaîtront ici à votre tour.',
 
   'action.title': 'Actions',
   'action.mission': 'Tenter',
@@ -345,10 +399,14 @@ export const fr = {
   'settings.speed.fast': 'Rapide',
   'settings.speed.instant': 'Instantanée',
   'settings.dice': 'Animation des dés',
+  'settings.sfx': 'Effets sonores',
   'settings.close': 'Fermer',
 
   'common.yes': 'Oui',
   'common.no': 'Non',
+  'common.cancel': 'Annuler',
+  'common.confirm': 'Confirmer',
+  'common.ok': 'OK',
 
   'error.players': 'Il faut entre 1 et 5 héros.',
   'error.colors': 'Chaque héros doit avoir sa couleur.',
@@ -373,6 +431,7 @@ export const fr = {
   'error.notHost': 'Seul l’hôte du salon peut confier une place à l’ordinateur.',
   'error.seatPresent': 'L’invité de cette place est connecté : il garde son héros.',
   'error.heroLocked': 'Ce héros a déjà joué : sa classe et son espèce ne changent plus.',
+  'error.tooFast': 'Doucement : une réaction à la fois.',
 };
 
 export type MessageKey = keyof typeof fr;

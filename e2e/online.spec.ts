@@ -31,9 +31,15 @@ test('deux joueurs partagent un salon, puis l’ordinateur joue côté serveur',
   await expect(host.getByText('Au tour de Capitaine')).toBeVisible();
   await expect(guest.getByText('Capitaine joue…')).toBeVisible();
 
-  // l'hôte passe la main à l'invité
+  // réaction rapide : l'invité la voit, avec le nom de l'hôte
+  await host.getByRole('button', { name: 'Réagir' }).click();
+  await host.getByRole('menuitem', { name: 'Envoyer 👍' }).click();
+  await expect(guest.locator('.reaction').filter({ hasText: 'Capitaine' })).toContainText('👍');
+
+  // l'hôte passe la main à l'invité, que l'onglet prévient
   await host.getByRole('button', { name: /Finir le tour/ }).click();
   await expect(guest.getByText('Au tour de Zoé')).toBeVisible();
+  await expect(guest).toHaveTitle(/À vous/);
   await expect(host.getByText('Zoé joue…')).toBeVisible();
   await expect(host.getByText(/Agent · Androïde/)).toBeVisible();
 
@@ -68,11 +74,11 @@ test('l’hôte confie à l’ordinateur la place d’un invité parti', async (
   await guestContext.close();
   await expect(host.getByRole('button', { name: 'Salon' })).toContainText('1/2');
   await host.getByRole('button', { name: 'Salon' }).click();
-  host.once('dialog', (d) => d.accept());
   await host
     .getByRole('dialog', { name: 'Salon' })
     .getByRole('button', { name: /Confier à l’ordinateur : Zoé/ })
     .click();
+  await host.getByRole('alertdialog').getByRole('button', { name: 'Confirmer' }).click();
   await expect(host.getByRole('dialog', { name: 'Salon' }).getByText('Ordinateur')).toHaveCount(2);
   await host.keyboard.press('Escape');
 

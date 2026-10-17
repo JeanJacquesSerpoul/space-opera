@@ -233,6 +233,34 @@ describe('salons en ligne', () => {
     host.ws.close();
   });
 
+  it('diffuse les réactions rapides, en limitant leur fréquence', async () => {
+    const created = await post<Created>('/api/games', {
+      online: true,
+      players: [hero('Ada', false, 'cyan'), hero('Invité', false, 'magenta')],
+    });
+    const { code, token } = created.body.room;
+    const joined = await post<Joined>(`/api/rooms/${code}/join`, { seat: 1, name: 'Grace' });
+    const host = listen(code, token);
+    await host.opened;
+
+    const sent = await fetch(`http://${base}/api/rooms/${code}/react`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: joined.body.token, emoji: '👍' }),
+    });
+    expect(sent.status).toBe(204);
+    const got = await host.until((e) => e.t === 'react');
+    expect(got).toMatchObject({ t: 'react', seat: 1, emoji: '👍' });
+
+    // trop vite, réaction inconnue, jeton inconnu
+    const tooFast = await post<{ code: string }>(`/api/rooms/${code}/react`, { token: joined.body.token, emoji: 'GG' });
+    expect(tooFast.status).toBe(429);
+    expect(tooFast.body.code).toBe('tooFast');
+    expect((await post<{ code: string }>(`/api/rooms/${code}/react`, { token, emoji: '<b>' })).body.code).toBe('unknownAction');
+    expect((await post<{ code: string }>(`/api/rooms/${code}/react`, { token: 'faux', emoji: '👍' })).status).toBe(403);
+    host.ws.close();
+  });
+
   it('ferme le salon quand la partie est supprimée', async () => {
     const created = await post<Created>('/api/games', {
       online: true,

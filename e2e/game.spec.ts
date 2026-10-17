@@ -77,8 +77,8 @@ test('confie à l’ordinateur la place d’un invité qui ne vient pas', async 
   // l'hôte passe la main : la partie attend l'invité, qui n'est jamais venu
   await page.getByRole('button', { name: /Finir le tour/ }).click();
   await expect(page.getByText('En attente de Invité 2 (place libre)')).toBeVisible();
-  page.once('dialog', (d) => d.accept());
   await page.getByRole('button', { name: /Confier à l’ordinateur/ }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Confirmer' }).click();
 
   // l'ordinateur joue cette place (et l'autre ordinateur), puis la main revient à l'hôte
   await expect(page.getByText('Tour 2')).toBeVisible({ timeout: 30_000 });
@@ -103,7 +103,88 @@ test('retrouve un salon de l’appareil depuis l’accueil', async ({ page }) =>
 
   // oublier le salon le retire de la liste
   await page.getByRole('button', { name: 'Quitter' }).click();
-  page.once('dialog', (d) => d.accept());
   await rooms.getByRole('button', { name: `Oublier le salon ${code}` }).click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Oublier' }).click();
   await expect(rooms.getByText(code)).toHaveCount(0);
+});
+
+test('demande confirmation, au style du jeu, avant de supprimer une partie', async ({ page }) => {
+  await page.goto('/#/nouvelle');
+  await page.getByRole('button', { name: /Décoller/ }).click();
+  await expect(page.getByText('Au tour de Vous')).toBeVisible();
+  await page.getByRole('button', { name: 'Quitter' }).click();
+
+  const remove = page.getByRole('button', { name: 'Supprimer' });
+  await remove.click();
+  const confirm = page.getByRole('alertdialog', { name: 'Supprimer cette partie ?' });
+  await expect(confirm).toBeVisible();
+  await confirm.getByRole('button', { name: 'Annuler' }).click();
+  await expect(confirm).toBeHidden();
+  await expect(page.locator('.saved-open')).toHaveCount(1);
+
+  await remove.click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Supprimer' }).click();
+  await expect(page.getByText('Aucune partie pour l’instant.')).toBeVisible();
+});
+
+test('accompagne une partie guidée pas à pas', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: /Partie guidée/ }).click();
+  const coach = page.locator('.coach');
+  await expect(coach.getByText('Sautez vers un système')).toBeVisible();
+
+  // l'étape se valide toute seule quand le joueur saute
+  await page.locator('.system.reachable').first().dispatchEvent('click');
+  await expect(coach.getByText('Choisissez une action')).toBeVisible();
+  await page.getByRole('button', { name: /Finir le tour/ }).click();
+  await expect(coach.getByText('Le jet de d20')).toBeVisible();
+  for (let i = 0; i < 3; i++) await coach.getByRole('button', { name: 'Suivant' }).click();
+  await expect(coach.getByText('Bon voyage, éclaireur !')).toBeVisible();
+  await coach.getByRole('button', { name: 'À moi de jouer !' }).click();
+  await expect(coach).toHaveCount(0);
+});
+
+test('ouvre la fiche d’un joueur depuis le Panthéon', async ({ page }) => {
+  // une partie terminée, gardée dans le navigateur
+  await page.addInitScript(() => {
+    const state = {
+      phase: 'finished',
+      round: 12,
+      players: [{ name: 'Ada', isBot: false, color: 'cyan', classId: 'agent', speciesId: 'android', kos: 1 }],
+      results: [{ seat: 0, renown: 40, creditPoints: 2, missions: 7, legendBonus: 5, total: 47, rank: 1 }],
+      events: [],
+      eventSeq: 0,
+    };
+    const at = '2026-10-01 11:00:00';
+    localStorage.setItem('so.games.v1', JSON.stringify({ nextId: 2, games: { 1: { state, created_at: at, updated_at: at } } }));
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Ada', exact: true }).click();
+  const sheet = page.getByRole('dialog', { name: 'Fiche de Ada' });
+  await expect(sheet).toBeVisible();
+  await expect(sheet.getByText('47').first()).toBeVisible();
+  await expect(sheet.getByText('Agent').first()).toBeVisible();
+  await expect(sheet.getByText('missions réussies')).toBeVisible();
+});
+
+test('sur téléphone, range le panneau de jeu dans un tiroir à onglets', async ({ page, isMobile }) => {
+  test.skip(!isMobile, 'disposition propre au téléphone');
+  await page.goto('/#/nouvelle');
+  await page.getByRole('button', { name: /Décoller/ }).click();
+  const finish = page.getByRole('button', { name: /Finir le tour/ });
+  await expect(page.getByRole('tab', { name: /Actions/ })).toHaveAttribute('aria-selected', 'true');
+  await expect(finish).toBeVisible();
+  await finish.click();
+  // pendant le tour des ordinateurs, l'onglet Actions dit où apparaîtront les actions
+  await expect(page.getByText('Vos actions apparaîtront ici à votre tour.')).toBeVisible();
+
+  await page.getByRole('tab', { name: 'Héros' }).click();
+  await expect(page.locator('.side-pane[data-pane="hero"] .sheet')).toBeVisible();
+  await page.getByRole('tab', { name: 'Journal' }).click();
+  await expect(page.locator('.side-pane[data-pane="log"] li').first()).toBeVisible();
+  await expect(page.locator('.side-pane[data-pane="hero"] .sheet')).toBeHidden();
+
+  // à mon tour, le tiroir revient de lui-même sur les actions
+  await expect(finish).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole('tab', { name: /Actions/ })).toHaveAttribute('aria-selected', 'true');
 });

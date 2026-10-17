@@ -49,6 +49,12 @@ describe('API', () => {
     expect(list.find((g) => g.id === id)!.players.every((p) => p.score !== null)).toBe(true);
     const stats = (await (await fetch(`${base}/api/stats`)).json()) as { name: string }[];
     expect(stats.map((r) => r.name)).toContain('Robo');
+
+    // fiche de joueur
+    const profile = (await (await fetch(`${base}/api/players/Robo`)).json()) as { games: number; classes: { classId: string }[] };
+    expect(profile.games).toBeGreaterThanOrEqual(1);
+    expect(profile.classes[0].classId).toBe('mystic');
+    expect((await fetch(`${base}/api/players/Personne`)).status).toBe(404);
   });
 
   it('renvoie 404 pour une partie inconnue', async () => {

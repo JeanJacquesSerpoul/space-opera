@@ -69,7 +69,8 @@ export type ErrorCode =
   | 'badToken'
   | 'notHost'
   | 'seatPresent'
-  | 'heroLocked';
+  | 'heroLocked'
+  | 'tooFast';
 
 export class GameError extends Error {
   constructor(

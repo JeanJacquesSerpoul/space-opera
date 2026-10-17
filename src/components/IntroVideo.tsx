@@ -8,6 +8,7 @@ import type { Tier } from '../../shared/types';
 import { markIntroSeen } from '../lib/intro';
 import { setPref, usePref } from '../lib/prefs';
 import { useT } from '../lib/i18n';
+import { useFocusTrap } from '../lib/useFocusTrap';
 import { PLAYER_COLORS, PLAYER_FILL, TIER_FILL } from '../lib/theme';
 
 /**
@@ -454,10 +455,7 @@ export function IntroVideo({ onClose }: { onClose: () => void }) {
   const durations = useMemo(() => captions.map(durationOf), [captions]);
   const total = durations.reduce((a, b) => a + b, 0);
   const dialogRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    dialogRef.current?.focus();
-  }, []);
+  useFocusTrap(dialogRef); // Échap est déjà géré par le lecteur
 
   const close = useCallback(() => {
     voice.stop();

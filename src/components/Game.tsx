@@ -1,19 +1,23 @@
 import { AnimatePresence, motion } from 'motion/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CRISES, MAX_THREAT, RENOWN_GOAL, reachable } from '../../shared/engine';
+import type { MessageKey } from '../../shared/i18n';
 import type { Action, GameEvent, GameState } from '../../shared/types';
 import { api } from '../lib/api';
 import { errorText, formatEvent, useT } from '../lib/i18n';
 import type { RoomClient } from '../lib/online';
 import { BOT_DELAYS, usePref } from '../lib/prefs';
+import { type Sound, playSfx } from '../lib/sfx';
+import { useTurnAlert } from '../lib/turnAlert';
 import { PLAYER_FILL } from '../lib/theme';
 import { Brand } from './Brand';
 import { DiceOverlay } from './Dice';
 import { Dialog } from './Dialog';
 import { EndScreen } from './EndScreen';
 import { ActionPanel, CrewBar, HeroSheet, ShopDialog, SystemInfo } from './HeroPanel';
-import { RoomButton, ToBotButton, canGiveToBot } from './Room';
+import { ReactButton, ReactionBubbles, RoomButton, ToBotButton, canGiveToBot } from './Room';
 import { StarMap } from './StarMap';
+import { Coach } from './Tutorial';
 
 /** Événements signalés par une notification. */
 const NOTABLE = new Set<GameEvent['kind']>(['levelUp', 'ko', 'crisis', 'boss', 'loot', 'discovery']);
@@ -32,6 +36,23 @@ function ThreatTrack({ threat }: { threat: number }) {
         {threat}/{MAX_THREAT}
       </span>
     </div>
+  );
+}
+
+type SideTab = 'actions' | 'hero' | 'crew' | 'log';
+const SIDE_TABS: SideTab[] = ['actions', 'hero', 'crew', 'log'];
+
+/** Journal de bord, du plus récent au plus ancien. */
+function LogList({ state }: { state: GameState }) {
+  const { t, lang } = useT();
+  return (
+    <ol className="log-list">
+      {[...state.events].reverse().map((e) => (
+        <li key={e.seq} style={{ '--c': PLAYER_FILL[state.players[e.seat]?.color ?? 'cyan'] } as React.CSSProperties}>
+          {formatEvent(e, state, t, lang)}
+        </li>
+      ))}
+    </ol>
   );
 }
 
@@ -60,6 +81,9 @@ export function Game({
   const [viewSeat, setViewSeat] = useState<number | null>(null);
   const [shop, setShop] = useState(false);
   const [showLog, setShowLog] = useState(false);
+  // téléphone : onglet du tiroir du bas, et tiroir agrandi ou non
+  const [tab, setTab] = useState<SideTab>('actions');
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [showEnd, setShowEnd] = useState(true);
   const [dice, setDice] = useState<GameEvent | null>(null);
   const [toasts, setToasts] = useState<GameEvent[]>([]);
@@ -108,6 +132,22 @@ export function Game({
       lastSeq.current = next.eventSeq;
       const rolled = [...fresh].reverse().find((e) => e.roll);
       if (rolled && diceOn) setDice(rolled);
+      // un seul son par mise à jour, le plus marquant (le dé animé joue les siens)
+      const kinds = new Set(fresh.map((e) => e.kind));
+      const sound: Sound | null = kinds.has('end')
+        ? 'victory'
+        : kinds.has('crisis') || kinds.has('boss')
+          ? 'crisis'
+          : kinds.has('levelUp')
+            ? 'levelUp'
+            : rolled && !diceOn
+              ? rolled.roll!.success
+                ? 'success'
+                : 'fail'
+              : kinds.has('move')
+                ? 'jump'
+                : null;
+      if (sound) playSfx(sound);
       const notable = fresh.filter((e) => NOTABLE.has(e.kind));
       if (notable.length) {
         setToasts((ts) => [...ts, ...notable].slice(-4));
@@ -143,6 +183,7 @@ export function Game({
       if (action.type === 'move') setSelected(null);
     } catch (e) {
       setError(errorText(e, t));
+      playSfx('error');
     } finally {
       setBusy(false);
     }
@@ -177,6 +218,12 @@ export function Game({
   const isLocal = (seat: number) => (room ? seat === mySeat : !state?.players[seat].isBot);
   const localTurn = !!state && isLocal(state.current);
   const canAct = !!state && state.phase === 'playing' && localTurn && !busy && gate === null && !dice;
+  // en ligne : prévenir quand c'est à cet appareil de jouer
+  useTurnAlert(!!room && localTurn && state?.phase === 'playing');
+  // téléphone : le tiroir montre les actions dès que c'est à moi
+  useEffect(() => {
+    if (localTurn) setTab('actions');
+  }, [localTurn]);
   const reach = useMemo(() => (state && canAct && state.movesLeft > 0 ? reachable(state, state.current) : null), [state, canAct]);
 
   if (!state || !current) {
@@ -198,6 +245,7 @@ export function Game({
       return;
     }
     setSelected((s) => (s === sysId ? null : sysId));
+    setTab('actions');
   };
 
   const viewed = state.players[viewSeat ?? state.current];
@@ -223,6 +271,7 @@ export function Game({
         <ThreatTrack threat={state.threat} />
         <span className="goal small muted">{t('game.goal', { goal: RENOWN_GOAL })}</span>
         <div className="topbar-tools">
+          {room && <ReactButton room={room} />}
           {room && <RoomButton room={room} />}
           <button type="button" className="btn ghost small" onClick={() => setShowLog(true)} aria-label={t('game.log')}>
             📜
@@ -253,6 +302,17 @@ export function Game({
               )}
             </div>
           )}
+          {room && <ReactionBubbles room={room} />}
+          {!room && (
+            <Coach
+              gameId={id}
+              state={state}
+              viewer={Math.max(
+                0,
+                state.players.findIndex((p) => !p.isBot),
+              )}
+            />
+          )}
           <div className="toasts" aria-live="polite">
             <AnimatePresence>
               {toasts.map((e) => (
@@ -270,23 +330,67 @@ export function Game({
           </div>
         </div>
 
-        <aside className="side">
-          <CrewBar state={state} onPick={(seat) => setViewSeat(seat === viewSeat ? null : seat)} />
-          {error && (
-            <p className="error" role="alert">
-              {error}
-            </p>
-          )}
-          {selected && selected !== current.pos && (
-            <SystemInfo state={state} system={selected} onClose={() => setSelected(null)} />
-          )}
-          {!finished && localTurn && <ActionPanel state={state} canAct={canAct} onAct={act} onShop={() => setShop(true)} />}
-          {finished && !showEnd && (
-            <button type="button" className="btn primary" onClick={() => setShowEnd(true)}>
-              🏆 {t('end.title')}
+        <aside className={`side ${drawerOpen ? 'open' : ''}`} data-tab={tab}>
+          {/* téléphone : tiroir à onglets ; sur ordinateur, tout reste visible l'un sous l'autre */}
+          <div className="side-tabs" role="tablist" aria-label={t('game.panel')}>
+            <button
+              type="button"
+              className="drawer-handle"
+              aria-label={drawerOpen ? t('game.drawerClose') : t('game.drawerOpen')}
+              aria-expanded={drawerOpen}
+              onClick={() => setDrawerOpen((o) => !o)}
+            >
+              <i />
             </button>
-          )}
-          <HeroSheet hero={viewed} />
+            {SIDE_TABS.map((k) => (
+              <button
+                key={k}
+                type="button"
+                role="tab"
+                aria-selected={tab === k}
+                className={tab === k ? 'on' : ''}
+                onClick={() => {
+                  if (tab === k) setDrawerOpen((o) => !o);
+                  setTab(k);
+                }}
+              >
+                {t(`game.tab.${k}` as MessageKey)}
+                {k === 'actions' && localTurn && !finished && <span className="tab-dot" aria-hidden />}
+              </button>
+            ))}
+          </div>
+          <div className="side-pane" data-pane="crew">
+            <CrewBar
+              state={state}
+              onPick={(seat) => {
+                setViewSeat(seat === viewSeat ? null : seat);
+                setTab('hero');
+              }}
+            />
+          </div>
+          <div className="side-pane" data-pane="actions">
+            {error && (
+              <p className="error" role="alert">
+                {error}
+              </p>
+            )}
+            {selected && selected !== current.pos && (
+              <SystemInfo state={state} system={selected} onClose={() => setSelected(null)} />
+            )}
+            {!finished && localTurn && <ActionPanel state={state} canAct={canAct} onAct={act} onShop={() => setShop(true)} />}
+            {!finished && !localTurn && <p className="muted wait-note">⏳ {t('game.waitActions')}</p>}
+            {finished && !showEnd && (
+              <button type="button" className="btn primary" onClick={() => setShowEnd(true)}>
+                🏆 {t('end.title')}
+              </button>
+            )}
+          </div>
+          <div className="side-pane" data-pane="hero">
+            <HeroSheet hero={viewed} />
+          </div>
+          <div className="side-pane" data-pane="log">
+            <LogList state={state} />
+          </div>
         </aside>
       </div>
 
@@ -294,13 +398,7 @@ export function Game({
         {shop && <ShopDialog key="shop" state={state} canAct={canAct} onAct={act} onClose={() => setShop(false)} />}
         {showLog && (
           <Dialog key="log" title={t('game.log')} onClose={() => setShowLog(false)} className="log">
-            <ol className="log-list">
-              {[...state.events].reverse().map((e) => (
-                <li key={e.seq} style={{ '--c': PLAYER_FILL[state.players[e.seat]?.color ?? 'cyan'] } as React.CSSProperties}>
-                  {formatEvent(e, state, t, lang)}
-                </li>
-              ))}
-            </ol>
+            <LogList state={state} />
           </Dialog>
         )}
         {dice && (

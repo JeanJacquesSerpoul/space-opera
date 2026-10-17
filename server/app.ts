@@ -8,18 +8,23 @@ import { CLASS_IDS, SPECIES_IDS } from '../shared/data';
 import { GameError, applyAction, createGame } from '../shared/engine';
 import {
   type HeroChoice,
+  REACT_COOLDOWN,
+  type Reaction,
   type RoomEvent,
   type RoomMeta,
   authorize,
+  checkReaction,
   joinSeat,
   newRoom,
   seatInfos,
   seatOfToken,
   seatToBot,
 } from '../shared/online';
+import { playerProfile } from '../shared/stats';
 import type { Action, GameState, HeroConfig, PlayerColor } from '../shared/types';
 import {
   deleteGame,
+  finishedGamesOf,
   getGame,
   getRoom,
   insertGame,
@@ -77,6 +82,9 @@ export function createServer() {
   // ——— salons : appareils connectés et ordinateurs joués par le serveur ———
   const clients = new Map<number, Set<Client>>();
   const botTimers = new Map<number, ReturnType<typeof setTimeout>>();
+  /** Dernière réaction de chaque place (`partie:siège`), pour limiter la fréquence. */
+  const lastReact = new Map<string, number>();
+  let reactSeq = 0;
 
   const connectedSeats = (id: number) => new Set([...(clients.get(id) ?? [])].map((c) => c.seat));
   const seatsOf = (id: number, meta: RoomMeta, state: GameState) => seatInfos(meta, state, connectedSeats(id));
@@ -235,6 +243,20 @@ export function createServer() {
     res.json({ state: next.state, seats: seatsOf(room.gameId, next.meta, next.state) });
   });
 
+  /** Réaction rapide d'un joueur du salon, diffusée à tous les appareils. */
+  app.post('/api/rooms/:code/react', (req, res) => {
+    const { gameId: id, meta } = roomOr404(String(req.params.code));
+    const { token, emoji } = (req.body ?? {}) as { token?: string; emoji?: unknown };
+    const seat = checkReaction(meta, token, emoji);
+    const key = `${id}:${seat}`;
+    const now = Date.now();
+    if (now - (lastReact.get(key) ?? 0) < REACT_COOLDOWN) throw new GameError('tooFast', 'Doucement : une réaction à la fois.');
+    lastReact.set(key, now);
+    reactSeq += 1;
+    broadcast(id, { t: 'react', seat, emoji: emoji as Reaction, id: reactSeq });
+    res.status(204).end();
+  });
+
   /** Coup d'un joueur du salon : le jeton prouve qu'il contrôle ce siège ; le moteur valide le coup. */
   app.post('/api/rooms/:code/actions', (req, res) => {
     const { gameId: id, meta, state } = roomOr404(String(req.params.code));
@@ -251,6 +273,14 @@ export function createServer() {
     res.json(leaderboard());
   });
 
+  /** Fiche d'un joueur du Panthéon. */
+  app.get('/api/players/:name', (req, res) => {
+    const name = String(req.params.name);
+    const profile = playerProfile(name, finishedGamesOf(name));
+    if (!profile) throw new GameError('notFound', 'Joueur introuvable.');
+    res.json(profile);
+  });
+
   // production : sert l'interface construite par Vite
   const dist = resolve('dist');
   if (process.env.NODE_ENV === 'production' && existsSync(dist)) {
@@ -265,7 +295,9 @@ export function createServer() {
           ? 404
           : err.code === 'badToken' || err.code === 'notHost'
             ? 403
-            : 400;
+            : err.code === 'tooFast'
+              ? 429
+              : 400;
       res.status(status).json({ error: err.message, code: err.code });
       return;
     }
