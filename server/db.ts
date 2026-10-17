@@ -1,6 +1,7 @@
 import { mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import type { RoomMeta } from '../shared/online';
 import type { Action, GameState } from '../shared/types';
 
 // « :memory: » : base temporaire (tests)
@@ -40,6 +41,12 @@ db.exec(`
     seat        INTEGER NOT NULL,
     action_json TEXT NOT NULL,
     created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS rooms (
+    code        TEXT PRIMARY KEY,
+    game_id     INTEGER NOT NULL UNIQUE REFERENCES games(id) ON DELETE CASCADE,
+    seats_json  TEXT NOT NULL
   );
 
   CREATE INDEX IF NOT EXISTS idx_moves_game ON moves(game_id);
@@ -98,8 +105,12 @@ export interface PlayerRow {
 
 export function listGames() {
   const games = db
-    .prepare('SELECT id, status, state_json, created_at, updated_at FROM games ORDER BY updated_at DESC, id DESC LIMIT 30')
-    .all() as { id: number; status: string; state_json: string; created_at: string; updated_at: string }[];
+    .prepare(
+      `SELECT g.id, g.status, g.state_json, g.created_at, g.updated_at, r.code AS room
+         FROM games g LEFT JOIN rooms r ON r.game_id = g.id
+        ORDER BY g.updated_at DESC, g.id DESC LIMIT 30`,
+    )
+    .all() as { id: number; status: string; state_json: string; created_at: string; updated_at: string; room: string | null }[];
   const players = db.prepare(
     'SELECT seat, name, is_bot, color, class_id, score, rank FROM game_players WHERE game_id = ? ORDER BY seat',
   );
@@ -107,6 +118,7 @@ export function listGames() {
     id: g.id,
     status: g.status,
     round: (JSON.parse(g.state_json) as GameState).round,
+    room: g.room,
     created_at: g.created_at,
     updated_at: g.updated_at,
     players: players.all(g.id) as unknown as PlayerRow[],
@@ -124,4 +136,37 @@ export function leaderboard() {
        GROUP BY name ORDER BY wins DESC, avg_score DESC LIMIT 50`,
     )
     .all();
+}
+
+// ——— salons en ligne ———
+
+export function insertRoom(gameId: number, meta: RoomMeta) {
+  db.prepare('INSERT INTO rooms (code, game_id, seats_json) VALUES (?, ?, ?)').run(meta.code, gameId, JSON.stringify(meta.seats));
+}
+
+export function getRoom(code: string): { gameId: number; meta: RoomMeta } | null {
+  const row = db.prepare('SELECT game_id, seats_json FROM rooms WHERE code = ?').get(code) as
+    | { game_id: number; seats_json: string }
+    | undefined;
+  return row ? { gameId: row.game_id, meta: { code, seats: JSON.parse(row.seats_json) } } : null;
+}
+
+export function roomOfGame(gameId: number): string | null {
+  const row = db.prepare('SELECT code FROM rooms WHERE game_id = ?').get(gameId) as { code: string } | undefined;
+  return row?.code ?? null;
+}
+
+/** Un invité a pris sa place : on garde son jeton et le nom de son héros. */
+export function saveSeats(gameId: number, meta: RoomMeta, state: GameState) {
+  db.exec('BEGIN');
+  try {
+    db.prepare('UPDATE rooms SET seats_json = ? WHERE game_id = ?').run(JSON.stringify(meta.seats), gameId);
+    db.prepare('UPDATE games SET state_json = ? WHERE id = ?').run(JSON.stringify(state), gameId);
+    const upd = db.prepare('UPDATE game_players SET name = ? WHERE game_id = ? AND seat = ?');
+    for (const [seat, p] of state.players.entries()) upd.run(p.name, gameId, seat);
+    db.exec('COMMIT');
+  } catch (e) {
+    db.exec('ROLLBACK');
+    throw e;
+  }
 }

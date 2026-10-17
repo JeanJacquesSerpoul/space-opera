@@ -35,7 +35,7 @@ jobs:
       - run: npm ci
       - name: Navigateur Playwright
         run: npx playwright install --with-deps chromium
-      - name: Tests de bout en bout (mobile et ordinateur)
+      - name: Tests de bout en bout (hors ligne mobile et ordinateur, en ligne à deux joueurs)
         run: npm run test:e2e
       - name: Rapport en cas d'échec
         if: failure()

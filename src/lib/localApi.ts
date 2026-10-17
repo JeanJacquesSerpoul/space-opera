@@ -1,5 +1,6 @@
 import { BOT_LEVELS, botAction } from '../../shared/bot';
 import { GameError, applyAction, createGame } from '../../shared/engine';
+import { type RoomMeta, newRoom } from '../../shared/online';
 import type { Action, GameState, HeroConfig } from '../../shared/types';
 import type { GameSummary, LeaderRow } from './api';
 
@@ -14,6 +15,8 @@ interface StoredGame {
   state: GameState;
   created_at: string;
   updated_at: string;
+  /** Salon pair-à-pair dont ce navigateur est l'hôte. */
+  room?: RoomMeta;
 }
 
 interface Store {
@@ -63,6 +66,7 @@ function summary(id: number, g: StoredGame): GameSummary {
     id,
     status: g.state.phase,
     round: g.state.round,
+    room: g.room?.code ?? null,
     created_at: g.created_at,
     updated_at: g.updated_at,
     players: g.state.players.map((p, seat) => {
@@ -78,6 +82,20 @@ function summary(id: number, g: StoredGame): GameSummary {
       };
     }),
   };
+}
+
+function newGame(players: HeroConfig[]) {
+  const configs = players.map((p, i) => ({
+    ...p,
+    name: p.name.trim().slice(0, 20) || `Héros ${i + 1}`,
+    level: p.level && BOT_LEVELS.includes(p.level) ? p.level : 'normal',
+  }));
+  const state = createGame(configs, Math.floor(Math.random() * 2 ** 31));
+  const s = store();
+  const id = s.nextId++;
+  s.games[id] = { state, created_at: now(), updated_at: now() };
+  save(s);
+  return { id, state };
 }
 
 // Les appels restent asynchrones pour garder la même interface que l'API HTTP.
@@ -98,20 +116,32 @@ export const localApi = {
         .slice(0, 30),
     ),
 
-  createGame: (players: HeroConfig[]) =>
+  createGame: (players: HeroConfig[]) => wrap(() => newGame(players)),
+
+  /** Partie en ligne dont ce navigateur sera l'hôte (pair-à-pair). */
+  createRoom: (players: HeroConfig[]) =>
     wrap(() => {
-      const configs = players.map((p, i) => ({
-        ...p,
-        name: p.name.trim().slice(0, 20) || `Héros ${i + 1}`,
-        level: p.level && BOT_LEVELS.includes(p.level) ? p.level : 'normal',
-      }));
-      const state = createGame(configs, Math.floor(Math.random() * 2 ** 31));
-      const s = store();
-      const id = s.nextId++;
-      s.games[id] = { state, created_at: now(), updated_at: now() };
-      save(s);
-      return { id, state };
+      // valide le salon avant de créer la partie (hôte humain)
+      const { meta, hostToken } = newRoom(players);
+      const { id, state } = newGame(players);
+      getStored(id).room = meta;
+      save(store());
+      return { id, state, meta, hostToken };
     }),
+
+  room: (id: number) => {
+    const g = getStored(id);
+    if (!g.room) throw new GameError('roomNotFound', 'Salon introuvable.');
+    return { state: g.state, meta: g.room };
+  },
+
+  saveRoom: (id: number, meta: RoomMeta, state: GameState) => {
+    getStored(id).room = meta;
+    update(id, state);
+  },
+
+  /** Coup d'un joueur du salon (le jeton a déjà été vérifié par l'hôte). */
+  actRoom: (id: number, seat: number, action: Action) => update(id, applyAction(getStored(id).state, seat, action)),
 
   getGame: (id: number) => wrap(() => ({ id, state: getStored(id).state })),
 
@@ -123,7 +153,8 @@ export const localApi = {
 
   act: (id: number, seat: number, action: Action) =>
     wrap(() => {
-      const state = getStored(id).state;
+      const { state, room } = getStored(id);
+      if (room) throw new GameError('online', 'Cette partie se joue en ligne, depuis son salon.');
       if (state.players[seat]?.isBot) throw new GameError('botSeat', 'Ce héros est contrôlé par l’ordinateur.');
       return update(id, applyAction(state, seat, action));
     }),

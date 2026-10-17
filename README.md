@@ -15,6 +15,10 @@ Même socle technique que *Rois du Rail* :
 - Pensé **mobile d'abord**, installable en **PWA** (service worker généré au build), jeu à plusieurs sur un même
   appareil et adversaires IA (facile, normal, difficile)
 - Version **hors ligne** (`VITE_OFFLINE=1`) où le moteur et l'IA tournent dans le navigateur (`localStorage`)
+- **Parties en ligne par salons** : l'hôte partage un lien (`#/salon/CODE`), chaque invité choisit un héros libre
+  et joue depuis son appareil (une place par appareil, jeton secret par place). Avec le serveur : coups par l'API
+  `/api/rooms/:code`, mises à jour en direct par WebSocket (`/ws`), ordinateurs joués par le serveur. Hors ligne :
+  pair-à-pair WebRTC (PeerJS), la partie tourne chez l'hôte qui valide les coups
 - **Vitest**, **Playwright** (mobile et ordinateur), **Biome**, CI et déploiement GitHub Pages
 
 ## Démarrer

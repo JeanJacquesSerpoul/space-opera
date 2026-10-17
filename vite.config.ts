@@ -25,14 +25,17 @@ function serviceWorker(): Plugin {
   };
 }
 
+// en développement, l'API tourne à côté (npm run dev:server), sur API_PORT
+const API = `localhost:${process.env.API_PORT ?? 3001}`;
+
 export default defineConfig({
   // GitHub Pages sert le site sous /<nom-du-dépôt>/
   base: process.env.BASE_PATH ?? '/',
   plugins: [react(), serviceWorker()],
   server: {
     proxy: {
-      '/api': 'http://localhost:3001',
-      '/ws': { target: 'ws://localhost:3001', ws: true },
+      '/api': `http://${API}`,
+      '/ws': { target: `ws://${API}`, ws: true },
     },
   },
 });

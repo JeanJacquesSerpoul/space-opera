@@ -3,7 +3,8 @@ import { useEffect, useState } from 'react';
 import { BOT_LEVELS } from '../../shared/bot';
 import { CLASSES, CLASS_IDS, SPECIES_IDS, STATS } from '../../shared/data';
 import { RENOWN_GOAL } from '../../shared/engine';
-import type { MessageKey } from '../../shared/i18n';
+import type { MessageKey, T } from '../../shared/i18n';
+import { isRoomCode } from '../../shared/online';
 import type { ClassId, HeroConfig, PlayerColor } from '../../shared/types';
 import { type GameSummary, type LeaderRow, OFFLINE, api } from '../lib/api';
 import { errorText, useT } from '../lib/i18n';
@@ -16,11 +17,13 @@ import { Brand, Starfield } from './Brand';
 export function Home({
   onNew,
   onOpen,
+  onRoom,
   onRules,
   onSettings,
 }: {
   onNew: () => void;
   onOpen: (id: number) => void;
+  onRoom: (code: string) => void;
   onRules: () => void;
   onSettings: () => void;
 }) {
@@ -28,6 +31,7 @@ export function Home({
   const [games, setGames] = useState<GameSummary[] | null>(null);
   const [leaders, setLeaders] = useState<LeaderRow[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [code, setCode] = useState('');
 
   const refresh = () => {
     api
@@ -68,6 +72,34 @@ export function Home({
             ⚙ {t('home.settings')}
           </button>
         </div>
+        <form
+          className="join-room"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (isRoomCode(code)) onRoom(code);
+          }}
+        >
+          <label htmlFor="room-code" className="muted small">
+            {t('home.joinHint')}
+          </label>
+          <div className="join-room-row">
+            <input
+              id="room-code"
+              className="name-input"
+              value={code}
+              maxLength={6}
+              autoCapitalize="characters"
+              autoComplete="off"
+              spellCheck={false}
+              placeholder="ABC234"
+              aria-label={t('home.joinTitle')}
+              onChange={(e) => setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
+            />
+            <button type="submit" className="btn" disabled={!isRoomCode(code)}>
+              🌐 {t('home.join')}
+            </button>
+          </div>
+        </form>
         {OFFLINE && <p className="muted small">{t('home.offline')}</p>}
         {error && <p className="error">{error}</p>}
       </motion.header>
@@ -79,9 +111,10 @@ export function Home({
           <ul className="saved-list">
             {games?.map((g) => (
               <li key={g.id} className="saved">
-                <button type="button" className="saved-open" onClick={() => onOpen(g.id)}>
+                <button type="button" className="saved-open" onClick={() => (g.room ? onRoom(g.room) : onOpen(g.id))}>
                   <span className="saved-meta">
                     #{g.id} · {g.status === 'finished' ? t('home.finished') : t('home.round', { n: g.round })}
+                    {g.room && ` · 🌐 ${t('home.onlineGame', { code: g.room })}`}
                   </span>
                   <span className="saved-players">
                     {g.players.map((p) => (
@@ -152,33 +185,62 @@ function defaultHero(i: number, taken: HeroConfig[], you: string): HeroConfig {
   return { name, isBot: i > 0, color, classId, speciesId: SPECIES_IDS[(i * 3) % SPECIES_IDS.length], level: 'normal' };
 }
 
+/**
+ * En ligne, l'hôte joue le premier héros (avec un vrai nom : « Vous » ne parlerait pas aux invités)
+ * et une place est proposée d'office à un ami.
+ */
+function onlineCrew(heroes: HeroConfig[], t: T): HeroConfig[] {
+  const list = heroes.map((h, i) =>
+    i === 0 ? { ...h, isBot: false, name: h.name === t('setup.you') ? t('setup.captain') : h.name } : h,
+  );
+  if (list.slice(1).some((h) => !h.isBot)) return list;
+  if (list.length === 1) list.push(defaultHero(1, list, ''));
+  list[1] = { ...list[1], isBot: false, name: t('setup.guestName', { n: 2 }) };
+  return list;
+}
+
 export function Setup({
   onStart,
   onBack,
   onRules,
+  initialOnline = false,
 }: {
-  onStart: (heroes: HeroConfig[]) => Promise<void>;
+  onStart: (heroes: HeroConfig[], online: boolean) => Promise<void>;
   onBack: () => void;
   onRules: () => void;
+  /** Arrivée par « créer un salon » : le mode en ligne est déjà choisi. */
+  initialOnline?: boolean;
 }) {
   const { t } = useT();
   const [heroes, setHeroes] = useState<HeroConfig[]>(() => {
     const list: HeroConfig[] = [];
     for (let i = 0; i < 3; i++) list.push(defaultHero(i, list, savedName(t('setup.you'))));
-    return list;
+    return initialOnline ? onlineCrew(list, t) : list;
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [online, setOnline] = useState(initialOnline);
 
   const patch = (i: number, p: Partial<HeroConfig>) => setHeroes((hs) => hs.map((h, k) => (k === i ? { ...h, ...p } : h)));
 
+  const chooseMode = (on: boolean) => {
+    setOnline(on);
+    setError(null);
+    if (on) setHeroes((hs) => onlineCrew(hs, t));
+  };
+
   const start = async () => {
+    if (online && !heroes.slice(1).some((h) => !h.isBot)) {
+      setError(t('setup.onlineNeedsGuest'));
+      return;
+    }
     setBusy(true);
     setError(null);
     const first = heroes.find((h) => !h.isBot);
-    if (first) saveName(first.name.trim());
+    // le nom d'hôte proposé d'office n'est pas retenu pour les parties suivantes
+    if (first && first.name !== t('setup.captain')) saveName(first.name.trim());
     try {
-      await onStart(heroes);
+      await onStart(heroes, online);
     } catch (e) {
       setError(errorText(e, t));
       setBusy(false);
@@ -200,8 +262,34 @@ export function Setup({
         </button>
       </header>
 
+      <fieldset className="mode-picker" aria-label={t('setup.mode')}>
+        {([false, true] as const).map((on) => (
+          <button
+            key={String(on)}
+            type="button"
+            aria-pressed={online === on}
+            className={`mode-card ${online === on ? 'on' : ''}`}
+            onClick={() => chooseMode(on)}
+          >
+            <span className="mode-icon" aria-hidden>
+              {on ? '🌐' : '📱'}
+            </span>
+            <b>{on ? t('setup.modeOnline') : t('setup.modeLocal')}</b>
+            <small>{on ? t('setup.modeOnlineHint') : t('setup.modeLocalHint')}</small>
+          </button>
+        ))}
+      </fieldset>
+
       <p className="muted center">
-        {heroes.length === 1 ? t('setup.solo', { goal: RENOWN_GOAL }) : humans > 1 ? t('setup.hotseat') : ''}
+        {online
+          ? OFFLINE
+            ? t('setup.onlineNotePeer')
+            : t('setup.onlineNote')
+          : heroes.length === 1
+            ? t('setup.solo', { goal: RENOWN_GOAL })
+            : humans > 1
+              ? t('setup.hotseat')
+              : ''}
       </p>
 
       <div className="hero-grid">
@@ -235,14 +323,24 @@ export function Setup({
               )}
             </div>
 
-            <div className="seg" role="radiogroup">
-              <button type="button" className={!h.isBot ? 'on' : ''} onClick={() => patch(i, { isBot: false })}>
-                {t('setup.human')}
-              </button>
-              <button type="button" className={h.isBot ? 'on' : ''} onClick={() => patch(i, { isBot: true })}>
-                {t('setup.bot')}
-              </button>
-            </div>
+            {online && i === 0 ? (
+              <span className="host-badge">{t('setup.hostBadge')}</span>
+            ) : (
+              <div className="seg" role="radiogroup">
+                <button
+                  type="button"
+                  className={!h.isBot ? 'on' : ''}
+                  onClick={() =>
+                    patch(i, online && h.isBot ? { isBot: false, name: t('setup.guestName', { n: i + 1 }) } : { isBot: false })
+                  }
+                >
+                  {online ? t('setup.guest') : t('setup.human')}
+                </button>
+                <button type="button" className={h.isBot ? 'on' : ''} onClick={() => patch(i, { isBot: true })}>
+                  {t('setup.bot')}
+                </button>
+              </div>
+            )}
             {h.isBot && (
               <div className="seg small" role="radiogroup" aria-label={t('setup.level')}>
                 {BOT_LEVELS.map((l) => (
@@ -325,7 +423,7 @@ export function Setup({
       <div className="setup-foot">
         <span className="muted">{t('setup.heroes', { n: heroes.length })}</span>
         <button type="button" className="btn primary big" disabled={busy} onClick={start}>
-          🚀 {t('setup.start')}
+          {online ? `🌐 ${t('setup.startOnline')}` : `🚀 ${t('setup.start')}`}
         </button>
       </div>
     </div>

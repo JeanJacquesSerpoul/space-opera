@@ -4,6 +4,7 @@ import { CRISES, MAX_THREAT, RENOWN_GOAL, reachable } from '../../shared/engine'
 import type { Action, GameEvent, GameState } from '../../shared/types';
 import { api } from '../lib/api';
 import { errorText, formatEvent, useT } from '../lib/i18n';
+import type { RoomClient } from '../lib/online';
 import { BOT_DELAYS, usePref } from '../lib/prefs';
 import { PLAYER_FILL } from '../lib/theme';
 import { Brand } from './Brand';
@@ -11,6 +12,7 @@ import { DiceOverlay } from './Dice';
 import { Dialog } from './Dialog';
 import { EndScreen } from './EndScreen';
 import { ActionPanel, CrewBar, HeroSheet, ShopDialog, SystemInfo } from './HeroPanel';
+import { RoomButton } from './Room';
 import { StarMap } from './StarMap';
 
 /** Événements signalés par une notification. */
@@ -35,18 +37,22 @@ function ThreatTrack({ threat }: { threat: number }) {
 
 export function Game({
   id,
+  room,
   onExit,
   onNewGame,
   onRules,
   onSettings,
 }: {
   id: number;
+  /** Partie en ligne : coups envoyés au salon, une seule place jouée sur cet appareil. */
+  room?: RoomClient;
   onExit: () => void;
   onNewGame: () => void;
   onRules: () => void;
   onSettings: () => void;
 }) {
   const { t, lang } = useT();
+  const mySeat = room?.me?.seat ?? null;
   const [state, setState] = useState<GameState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -67,15 +73,25 @@ export function Game({
   const tRef = useRef(t);
   tRef.current = t;
 
-  const checkGate = useCallback((s: GameState) => {
-    const humans = s.players.filter((p) => !p.isBot).length;
-    const seat = s.current;
-    if (s.phase !== 'playing' || s.players[seat].isBot) return;
-    if (humans > 1 && lastHuman.current !== null && lastHuman.current !== seat) setGate(seat);
-    else lastHuman.current = seat;
-  }, []);
+  const checkGate = useCallback(
+    (s: GameState) => {
+      // en ligne, chacun joue sur son appareil : personne à qui passer la main
+      if (room) return;
+      const humans = s.players.filter((p) => !p.isBot).length;
+      const seat = s.current;
+      if (s.phase !== 'playing' || s.players[seat].isBot) return;
+      if (humans > 1 && lastHuman.current !== null && lastHuman.current !== seat) setGate(seat);
+      else lastHuman.current = seat;
+    },
+    [room],
+  );
 
   useEffect(() => {
+    if (room) {
+      lastSeq.current = room.state.eventSeq;
+      setState(room.state);
+      return;
+    }
     api
       .getGame(id)
       .then(({ state: s }) => {
@@ -84,7 +100,7 @@ export function Game({
         setState(s);
       })
       .catch((e) => setError(errorText(e, tRef.current)));
-  }, [id]);
+  }, [id, room]);
 
   const receive = useCallback(
     (next: GameState) => {
@@ -103,13 +119,26 @@ export function Game({
     [diceOn, checkGate],
   );
 
+  // salon : chaque mise à jour reçue en direct (coups des autres joueurs, ordinateurs, places)
+  const receiveRef = useRef(receive);
+  receiveRef.current = receive;
+  useEffect(() => {
+    if (!room) return;
+    let shown = room.state;
+    return room.subscribe(() => {
+      if (room.state === shown) return;
+      shown = room.state;
+      receiveRef.current(room.state);
+    });
+  }, [room]);
+
   const act = async (action: Action) => {
     if (!state || busy) return;
     setBusy(true);
     setError(null);
     try {
-      const { state: next } = await api.act(id, state.current, action);
-      receive(next);
+      if (room) await room.act(action);
+      else receive((await api.act(id, state.current, action)).state);
       if (action.type !== 'buy' && action.type !== 'move') setShop(false);
       if (action.type === 'move') setSelected(null);
     } catch (e) {
@@ -119,21 +148,21 @@ export function Game({
     }
   };
 
-  // tour des ordinateurs
+  // tour des ordinateurs (dans un salon avec serveur, c'est le serveur qui les fait jouer)
   const current = state?.players[state.current];
+  const drivesBots = !room || room.drivesBots;
   useEffect(() => {
-    if (state?.phase !== 'playing' || !current?.isBot || dice || busy) return;
+    if (!drivesBots || state?.phase !== 'playing' || !current?.isBot || dice || busy) return;
     const timer = setTimeout(
       () => {
-        api
-          .bot(id)
-          .then(({ state: next }) => receive(next))
-          .catch((e) => setError(errorText(e, tRef.current)));
+        (room ? room.bot() : api.bot(id).then(({ state: next }) => receive(next))).catch((e) =>
+          setError(errorText(e, tRef.current)),
+        );
       },
       rush ? 0 : BOT_DELAYS[botSpeed],
     );
     return () => clearTimeout(timer);
-  }, [state, current, dice, busy, rush, botSpeed, id, receive]);
+  }, [state, current, drivesBots, dice, busy, rush, botSpeed, id, room, receive]);
 
   // « Accélérer » ne vaut que jusqu'au prochain tour humain ; la fiche suit le joueur actif
   const currentSeat = state?.current;
@@ -144,7 +173,10 @@ export function Game({
     setViewSeat(null);
   }, [currentSeat, currentIsBot]);
 
-  const canAct = !!state && state.phase === 'playing' && !!current && !current.isBot && !busy && gate === null && !dice;
+  // héros joués sur cet appareil : en ligne, sa place seulement
+  const isLocal = (seat: number) => (room ? seat === mySeat : !state?.players[seat].isBot);
+  const localTurn = !!state && isLocal(state.current);
+  const canAct = !!state && state.phase === 'playing' && localTurn && !busy && gate === null && !dice;
   const reach = useMemo(() => (state && canAct && state.movesLeft > 0 ? reachable(state, state.current) : null), [state, canAct]);
 
   if (!state || !current) {
@@ -171,6 +203,14 @@ export function Game({
   const viewed = state.players[viewSeat ?? state.current];
   const finished = state.phase === 'finished';
   const botDiceDelay = rush ? 250 : BOT_DELAYS[botSpeed] * 1.4 + 700;
+  const seatInfo = room?.seats[state.current];
+  const banner = current.isBot
+    ? t('game.thinking', { name: current.name })
+    : localTurn
+      ? t('game.turnOf', { name: current.name })
+      : seatInfo && !seatInfo.claimed
+        ? t('room.waitingGuest', { name: current.name })
+        : t('room.waiting', { name: current.name });
 
   return (
     <div className="screen game">
@@ -183,6 +223,7 @@ export function Game({
         <ThreatTrack threat={state.threat} />
         <span className="goal small muted">{t('game.goal', { goal: RENOWN_GOAL })}</span>
         <div className="topbar-tools">
+          {room && <RoomButton room={room} />}
           <button type="button" className="btn ghost small" onClick={() => setShowLog(true)} aria-label={t('game.log')}>
             📜
           </button>
@@ -201,8 +242,8 @@ export function Game({
           {!finished && (
             <div className="turn-banner" style={{ '--c': PLAYER_FILL[current.color] } as React.CSSProperties}>
               <span className="dot" />
-              {current.isBot ? t('game.thinking', { name: current.name }) : t('game.turnOf', { name: current.name })}
-              {current.isBot && !rush && (
+              {banner}
+              {current.isBot && drivesBots && !rush && (
                 <button type="button" className="btn ghost small" onClick={() => setRush(true)}>
                   ⏩ {t('game.speedUp')}
                 </button>
@@ -236,7 +277,7 @@ export function Game({
           {selected && selected !== current.pos && (
             <SystemInfo state={state} system={selected} onClose={() => setSelected(null)} />
           )}
-          {!finished && !current.isBot && <ActionPanel state={state} canAct={canAct} onAct={act} onShop={() => setShop(true)} />}
+          {!finished && localTurn && <ActionPanel state={state} canAct={canAct} onAct={act} onShop={() => setShop(true)} />}
           {finished && !showEnd && (
             <button type="button" className="btn primary" onClick={() => setShowEnd(true)}>
               🏆 {t('end.title')}
@@ -264,7 +305,7 @@ export function Game({
             key={`dice-${dice.seq}`}
             event={dice}
             state={state}
-            autoClose={state.players[dice.seat].isBot ? botDiceDelay : undefined}
+            autoClose={isLocal(dice.seat) ? undefined : botDiceDelay}
             onDone={() => setDice(null)}
           />
         )}

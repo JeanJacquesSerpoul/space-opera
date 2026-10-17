@@ -2,17 +2,26 @@ import { AnimatePresence } from 'motion/react';
 import { useEffect, useState } from 'react';
 import type { HeroConfig } from '../shared/types';
 import { Game } from './components/Game';
+import { RoomScreen } from './components/Room';
 import { RulesDialog } from './components/Rules';
 import { Home, Setup } from './components/Screens';
 import { SettingsDialog } from './components/Settings';
 import { api } from './lib/api';
+import { createRoom } from './lib/online';
 
-type Route = { name: 'home' } | { name: 'setup' } | { name: 'game'; id: number };
+type Route =
+  | { name: 'home' }
+  | { name: 'setup'; online?: boolean }
+  | { name: 'game'; id: number }
+  | { name: 'room'; code: string };
 
 function parseHash(): Route {
   const m = location.hash.match(/^#\/partie\/(\d+)/);
   if (m) return { name: 'game', id: Number(m[1]) };
+  const room = location.hash.match(/^#\/salon\/([A-Za-z0-9]{6})/);
+  if (room) return { name: 'room', code: room[1].toUpperCase() };
   if (location.hash === '#/nouvelle') return { name: 'setup' };
+  if (location.hash === '#/nouveau-salon') return { name: 'setup', online: true };
   return { name: 'home' };
 }
 
@@ -30,7 +39,8 @@ export default function App() {
     location.hash = hash;
   };
 
-  const start = async (heroes: HeroConfig[]) => {
+  const start = async (heroes: HeroConfig[], online: boolean) => {
+    if (online) return go(`#/salon/${await createRoom(heroes)}`);
     const { id } = await api.createGame(heroes);
     go(`#/partie/${id}`);
   };
@@ -41,7 +51,27 @@ export default function App() {
   let screen: React.ReactNode;
   switch (route.name) {
     case 'setup':
-      screen = <Setup onStart={start} onBack={() => go('#/')} onRules={openRules} />;
+      screen = (
+        <Setup
+          key={String(route.online)}
+          initialOnline={route.online}
+          onStart={start}
+          onBack={() => go('#/')}
+          onRules={openRules}
+        />
+      );
+      break;
+    case 'room':
+      screen = (
+        <RoomScreen
+          key={route.code}
+          code={route.code}
+          onExit={() => go('#/')}
+          onNewGame={() => go('#/nouvelle')}
+          onRules={openRules}
+          onSettings={openSettings}
+        />
+      );
       break;
     case 'game':
       screen = (
@@ -60,6 +90,7 @@ export default function App() {
         <Home
           onNew={() => go('#/nouvelle')}
           onOpen={(id) => go(`#/partie/${id}`)}
+          onRoom={(code) => go(`#/salon/${code}`)}
           onRules={openRules}
           onSettings={openSettings}
         />

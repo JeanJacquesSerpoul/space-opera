@@ -48,3 +48,18 @@ test('reprend une partie sauvegardée depuis l’accueil', async ({ page }) => {
   await page.locator('.saved-open').first().click();
   await expect(page.getByText('Au tour de Vous')).toBeVisible();
 });
+
+test('ouvre un salon en ligne et affiche son code d’invitation', async ({ page }) => {
+  await page.goto('/#/nouvelle');
+  await page.getByRole('button', { name: /En ligne/ }).click();
+  await expect(page.getByText('👑 Vous (hôte)')).toBeVisible();
+  await page.getByRole('button', { name: /Ouvrir le salon/ }).click();
+
+  // hors ligne, la partie tourne chez l'hôte : il joue tout de suite, l'invité est attendu
+  await expect(page).toHaveURL(/#\/salon\/[A-Z2-9]{6}$/);
+  await expect(page.getByText('Au tour de Capitaine')).toBeVisible();
+  await page.getByRole('button', { name: 'Salon' }).click();
+  const code = page.url().slice(-6);
+  await expect(page.getByRole('dialog', { name: 'Salon' }).getByText(code, { exact: true })).toBeVisible();
+  await expect(page.getByText('En attente d’un joueur')).toBeVisible();
+});

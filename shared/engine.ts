@@ -61,7 +61,12 @@ export type ErrorCode =
   | 'noCredits'
   | 'unknownAction'
   | 'botSeat'
-  | 'notFound';
+  | 'notFound'
+  // salons en ligne
+  | 'online'
+  | 'roomNotFound'
+  | 'seatTaken'
+  | 'badToken';
 
 export class GameError extends Error {
   constructor(

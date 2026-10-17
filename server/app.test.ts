@@ -1,21 +1,20 @@
 import type { AddressInfo } from 'node:net';
-import type { Server } from 'node:http';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { GameState } from '../shared/types';
 import { createServer } from './app';
 
 // base en mémoire : voir vitest.config.ts (DB_PATH=:memory:)
-let server: Server;
+let srv: ReturnType<typeof createServer>;
 let base = '';
 
 beforeAll(async () => {
-  server = createServer().listen(0);
-  await new Promise((r) => server.once('listening', r));
-  base = `http://localhost:${(server.address() as AddressInfo).port}`;
+  srv = createServer();
+  await new Promise<void>((r) => srv.server.listen(0, r));
+  base = `http://localhost:${(srv.server.address() as AddressInfo).port}`;
 });
 
 afterAll(() => {
-  server.close();
+  srv.close();
 });
 
 const post = (path: string, body?: unknown) =>

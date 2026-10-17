@@ -5,6 +5,8 @@ export interface GameSummary {
   id: number;
   status: GameState['phase'];
   round: number;
+  /** Code du salon pour une partie en ligne. */
+  room: string | null;
   created_at: string;
   updated_at: string;
   players: {
@@ -28,7 +30,7 @@ export interface LeaderRow {
   missions: number;
 }
 
-async function call<T>(url: string, init?: RequestInit): Promise<T> {
+export async function call<T>(url: string, init?: RequestInit): Promise<T> {
   let res: Response;
   try {
     res = await fetch(url, { ...init, headers: { 'Content-Type': 'application/json', ...init?.headers } });
