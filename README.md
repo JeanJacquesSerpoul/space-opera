@@ -7,6 +7,8 @@ pendant que la menace du **Fléau** grandit. Univers, noms et règles sont origi
 
 L'interface existe en **français et en anglais** (langue du navigateur par défaut, modifiable dans les réglages).
 
+**Démo hors ligne** (sans serveur, parties gardées dans le navigateur) : https://jeanjacquesserpoul.github.io/space-opera/
+
 Même socle technique que *Rois du Rail* :
 
 - **React 19 + TypeScript + Vite**, animations avec **Motion**, zoom/pan tactile avec **react-zoom-pan-pinch**
@@ -15,11 +17,33 @@ Même socle technique que *Rois du Rail* :
 - Pensé **mobile d'abord**, installable en **PWA** (service worker généré au build), jeu à plusieurs sur un même
   appareil et adversaires IA (facile, normal, difficile)
 - Version **hors ligne** (`VITE_OFFLINE=1`) où le moteur et l'IA tournent dans le navigateur (`localStorage`)
-- **Parties en ligne par salons** : l'hôte partage un lien (`#/salon/CODE`), chaque invité choisit un héros libre
-  et joue depuis son appareil (une place par appareil, jeton secret par place). Avec le serveur : coups par l'API
-  `/api/rooms/:code`, mises à jour en direct par WebSocket (`/ws`), ordinateurs joués par le serveur. Hors ligne :
-  pair-à-pair WebRTC (PeerJS), la partie tourne chez l'hôte qui valide les coups
-- **Vitest**, **Playwright** (mobile et ordinateur), **Biome**, CI et déploiement GitHub Pages
+- **Parties en ligne par salons** (voir plus bas), avec le serveur (WebSocket) ou en pair-à-pair (PeerJS)
+- Effets sonores synthétisés (Web Audio, aucun fichier audio), coupables dans les réglages
+- **Vitest**, **Playwright** (mobile, ordinateur et en ligne à deux joueurs), **Biome**, CI et déploiement GitHub Pages
+
+## Découvrir le jeu
+
+- **Présentation animée** en motion design (8 chapitres, sous-titres, voix off du navigateur), jouée à la première
+  visite puis depuis l'accueil (« 🎬 Découvrir le jeu »)
+- **Partie guidée** (« 🧭 Partie guidée ») : une vraie partie contre un ordinateur facile, commentée pas à pas
+- **Règles** complètes dans « ? », chance de réussite affichée sur chaque mission
+- **Panthéon des héros** et **fiche de joueur** (parties, victoires, classes jouées, courbe des derniers scores)
+- Sur téléphone, carte plein écran et tiroir à onglets **Actions / Héros / Équipage / Journal**
+
+## Jouer en ligne
+
+- L'hôte choisit « En ligne » en constituant l'équipage : les héros « Invité » attendent ses amis. Il partage le lien
+  (`#/salon/CODE`) ou le code à 6 caractères (champ « Rejoindre » de l'accueil).
+- Chaque invité choisit un héros libre, son nom, et peut changer sa classe et son espèce tant que le héros n'a pas
+  joué. Une place par appareil, prouvée par un jeton secret ; chaque onglet garde sa propre place.
+- Pendant la partie : alerte « à vous de jouer » (son, vibration, titre d'onglet, notification système sur demande),
+  réactions rapides (👍 👏 😂 😱 🎲 GG), présence de chacun, et l'hôte peut confier à l'ordinateur la place d'un
+  invité qui ne vient pas ou qui est parti.
+- « Mes salons » à l'accueil : revenir dans un salon déjà joué sur l'appareil, ou l'oublier.
+- **Avec le serveur** : coups par l'API (`/api/rooms/:code`, `/join`, `/actions`, `/bot-seat`, `/react`), mises à jour
+  en direct par WebSocket (`/ws`), ordinateurs joués par le serveur.
+- **Hors ligne** (démo GitHub Pages) : pair-à-pair WebRTC (PeerJS) ; la partie tourne chez l'hôte, qui valide les coups
+  et fait jouer les ordinateurs : il doit garder la page ouverte.
 
 ## Démarrer
 
@@ -35,19 +59,20 @@ Ouvrir http://localhost:5173. Production : `npm run build` puis `npm start` (por
 | Commande | Rôle |
 | --- | --- |
 | `npm run dev` | API (port 3001, `API_PORT`) + Vite (port 5173) |
-| `npm test` | tests du moteur (dont des parties complètes entre IA) et de l'API |
+| `npm test` | tests du moteur (dont des parties complètes entre IA), des statistiques, de l'API et des salons |
 | `npm run simulate -- 300 4` | équilibrage : victoires par classe sur des parties simulées (`LEVEL=hard` pour un seul niveau) |
 | `npm run typecheck` | vérification TypeScript |
 | `npm run build:pages` | build statique hors ligne pour GitHub Pages |
-| `npm run test:e2e` | tests de bout en bout Playwright |
+| `npm run test:e2e` | tests de bout en bout Playwright (hors ligne mobile et ordinateur, en ligne à deux joueurs) |
 | `npm run lint` / `npm run format` | Biome |
 
 ## Structure
 
 ```
-shared/   moteur de jeu pur (règles, IA, données, secteur, i18n) – utilisé par le serveur et le client
-server/   API Express + base SQLite (data/space-opera.db, chemin modifiable via DB_PATH)
-src/      interface React (carte stellaire SVG, fiche de héros, dé animé)
+shared/   moteur de jeu pur (règles, IA, données, secteur, salons, statistiques, i18n) – serveur et client
+server/   API Express + WebSocket des salons + base SQLite (data/space-opera.db, chemin modifiable via DB_PATH)
+src/      interface React (carte stellaire SVG, fiche de héros, dé animé, salons, présentation, partie guidée)
+e2e/      scénarios Playwright
 scripts/  simulation d'équilibrage
 ```
 
