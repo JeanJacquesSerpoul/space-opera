@@ -63,3 +63,22 @@ test('ouvre un salon en ligne et affiche son code d’invitation', async ({ page
   await expect(page.getByRole('dialog', { name: 'Salon' }).getByText(code, { exact: true })).toBeVisible();
   await expect(page.getByText('En attente d’un joueur')).toBeVisible();
 });
+
+test('confie à l’ordinateur la place d’un invité qui ne vient pas', async ({ page }) => {
+  await page.goto('/#/nouveau-salon');
+  await page.getByRole('button', { name: /Ouvrir le salon/ }).click();
+  await expect(page.getByText('Au tour de Capitaine')).toBeVisible();
+
+  // l'hôte passe la main : la partie attend l'invité, qui n'est jamais venu
+  await page.getByRole('button', { name: /Finir le tour/ }).click();
+  await expect(page.getByText('En attente de Invité 2 (place libre)')).toBeVisible();
+  page.once('dialog', (d) => d.accept());
+  await page.getByRole('button', { name: /Confier à l’ordinateur/ }).click();
+
+  // l'ordinateur joue cette place (et l'autre ordinateur), puis la main revient à l'hôte
+  await expect(page.getByText('Tour 2')).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText('Au tour de Capitaine')).toBeVisible();
+  await page.getByRole('button', { name: 'Salon' }).click();
+  await expect(page.getByText('En attente d’un joueur')).toBeHidden();
+  await expect(page.getByRole('dialog', { name: 'Salon' }).getByText('Ordinateur')).toHaveCount(2);
+});

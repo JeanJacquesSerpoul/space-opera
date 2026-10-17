@@ -98,6 +98,10 @@ export const en: Record<MessageKey, string> = {
   'room.hintPeer': 'Send this link to your friends. The game runs on your device: keep this page open.',
   'room.waiting': '{name} is playing…',
   'room.waitingGuest': 'Waiting for {name} (free seat)',
+  'room.toBot': 'Hand to the computer',
+  'room.toBotConfirm': 'Hand {name} over to the computer? Nobody will be able to take this seat anymore.',
+  'room.toBotHint': 'A guest never came or left? Hand their seat to the computer to keep playing.',
+  'room.lostSeat': 'The host handed your hero over to the computer.',
 
   'level.easy': 'Easy',
   'level.normal': 'Normal',
@@ -303,4 +307,6 @@ export const en: Record<MessageKey, string> = {
   'error.seatTaken': 'This seat is already taken.',
   'error.badToken': 'You do not control this hero.',
   'error.hostOffline': 'The room host is not connected. Ask them to open the game, then try again.',
+  'error.notHost': 'Only the room host can hand a seat over to the computer.',
+  'error.seatPresent': 'The guest in this seat is connected: they keep their hero.',
 };

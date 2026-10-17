@@ -96,6 +96,10 @@ export const fr = {
   'room.hintPeer': 'Envoyez ce lien à vos amis. La partie tourne sur votre appareil : gardez cette page ouverte.',
   'room.waiting': '{name} joue…',
   'room.waitingGuest': 'En attente de {name} (place libre)',
+  'room.toBot': 'Confier à l’ordinateur',
+  'room.toBotConfirm': 'Confier {name} à l’ordinateur ? Plus personne ne pourra prendre cette place.',
+  'room.toBotHint': 'Un invité ne vient pas ou est parti ? Confiez sa place à l’ordinateur pour continuer.',
+  'room.lostSeat': 'L’hôte a confié votre héros à l’ordinateur.',
 
   'level.easy': 'Facile',
   'level.normal': 'Normal',
@@ -302,6 +306,8 @@ export const fr = {
   'error.seatTaken': 'Cette place est déjà prise.',
   'error.badToken': 'Vous ne contrôlez pas ce héros.',
   'error.hostOffline': 'L’hôte du salon n’est pas connecté. Demandez-lui d’ouvrir la partie, puis réessayez.',
+  'error.notHost': 'Seul l’hôte du salon peut confier une place à l’ordinateur.',
+  'error.seatPresent': 'L’invité de cette place est connecté : il garde son héros.',
 };
 
 export type MessageKey = keyof typeof fr;

@@ -134,6 +134,7 @@ function JoinRoom({ room, onExit }: { room: RoomClient; onExit: () => void }) {
         <small className="muted">{t('room.joinInfo', { n: room.seats.length, round: room.state.round })}</small>
       </motion.div>
 
+      {room.lostSeat && <p className="error center">{t('room.lostSeat')}</p>}
       {room.state.phase === 'finished' ? (
         <p className="muted center">{t('room.finished')}</p>
       ) : free.length === 0 ? (
@@ -175,6 +176,39 @@ function JoinRoom({ room, onExit }: { room: RoomClient; onExit: () => void }) {
         </div>
       )}
     </div>
+  );
+}
+
+/** Place d'invité que l'hôte peut confier à l'ordinateur : jamais prise, ou invité parti. */
+export const canGiveToBot = (room: RoomClient, seat: SeatInfo | undefined) =>
+  room.role === 'host' && seat?.kind === 'remote' && !seat.connected && room.state.phase !== 'finished';
+
+/** L'hôte confie une place à l'ordinateur (après confirmation) pour que la partie continue. */
+export function ToBotButton({ room, seat, className = '' }: { room: RoomClient; seat: number; className?: string }) {
+  const { t } = useT();
+  const [busy, setBusy] = useState(false);
+  const name = room.state.players[seat].name;
+  const give = async () => {
+    if (!confirm(t('room.toBotConfirm', { name }))) return;
+    setBusy(true);
+    try {
+      await room.giveToBot(seat);
+    } catch (e) {
+      alert(errorText(e, t));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <button
+      type="button"
+      className={`btn small ${className}`}
+      disabled={busy}
+      onClick={give}
+      aria-label={`${t('room.toBot')} : ${name}`}
+    >
+      🤖 {t('room.toBot')}
+    </button>
   );
 }
 
@@ -223,6 +257,7 @@ function SeatRow({
     return (
       <li className={`seat-row ${mine ? 'mine' : ''}`} style={style}>
         {content}
+        {canGiveToBot(room, seat) && <ToBotButton room={room} seat={seat.seat} />}
       </li>
     );
   return (
@@ -307,6 +342,7 @@ export function RoomSheet({ room, onClose }: { room: RoomClient; onClose: () => 
         )}
       </div>
       <p className="muted small">{room.drivesBots ? t('room.hintPeer') : t('room.hint')}</p>
+      {room.seats.some((s) => canGiveToBot(room, s)) && <p className="muted small">{t('room.toBotHint')}</p>}
       <ul className="seat-list">
         {room.seats.map((s) => (
           <SeatRow key={s.seat} room={room} seat={s} />

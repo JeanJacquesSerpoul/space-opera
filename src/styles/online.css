@@ -90,7 +90,8 @@
 }
 
 .join-card,
-.join-form {
+.join-form,
+.join > .error {
   width: min(560px, 100%);
   margin: 0 auto;
 }

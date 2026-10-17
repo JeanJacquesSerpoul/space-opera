@@ -10,6 +10,7 @@ import {
   joinSeat,
   seatInfos,
   seatOfToken,
+  seatToBot,
 } from '../../shared/online';
 import type { Action, GameState, HeroConfig } from '../../shared/types';
 import { OFFLINE, call } from './api';
@@ -38,9 +39,13 @@ export interface RoomClient {
   link: LinkStatus;
   /** Erreur durable (salon fermé, hôte parti…). */
   fatal: string | null;
+  /** L'hôte a confié la place de cet invité à l'ordinateur. */
+  lostSeat: boolean;
   join(seat: number, name: string): Promise<void>;
   act(action: Action): Promise<void>;
   bot(): Promise<void>;
+  /** Hôte seulement : une place d'invité libre ou abandonnée est désormais jouée par l'ordinateur. */
+  giveToBot(seat: number): Promise<void>;
   /** Prévenu à chaque changement (partie, places, connexion). */
   subscribe(fn: () => void): () => void;
   close(): void;
@@ -122,6 +127,7 @@ abstract class BaseRoom {
   gameId: number | null = null;
   link: LinkStatus = 'connecting';
   fatal: string | null = null;
+  lostSeat = false;
   protected closed = false;
   private listeners = new Set<() => void>();
 
@@ -148,8 +154,19 @@ abstract class BaseRoom {
   /** Les messages peuvent se croiser : on ignore un état plus ancien que celui affiché. */
   protected setState(state: GameState, seats?: SeatInfo[]) {
     if (!this.state || state.eventSeq >= this.state.eventSeq) this.state = state;
-    if (seats) this.seats = seats;
+    if (seats) this.setSeats(seats);
     this.emit();
+  }
+
+  /** Places du salon : un invité dont la place a été confiée à l'ordinateur la perd. */
+  setSeats(seats: SeatInfo[]) {
+    this.seats = seats;
+    const mine = this.me?.role === 'guest' ? seats[this.me.seat] : undefined;
+    if (mine && mine.kind !== 'remote') {
+      forgetIdentity(this.code);
+      this.me = null;
+      this.lostSeat = true;
+    }
   }
 
   protected setLink(link: LinkStatus) {
@@ -183,7 +200,7 @@ class ServerRoom extends BaseRoom implements RoomClient {
       const e = JSON.parse(String(msg.data)) as RoomEvent;
       if (e.t === 'room' || e.t === 'state') this.setState(e.state, e.seats);
       else if (e.t === 'seats') {
-        this.seats = e.seats;
+        this.setSeats(e.seats);
         this.emit();
       } else if (e.t === 'error') {
         this.fatal = e.code;
@@ -224,6 +241,15 @@ class ServerRoom extends BaseRoom implements RoomClient {
     /* le serveur fait jouer les ordinateurs */
   }
 
+  async giveToBot(seat: number) {
+    if (this.me?.role !== 'host') throw failure('notHost');
+    const r = await call<{ state: GameState; seats: SeatInfo[] }>(`/api/rooms/${this.code}/bot-seat`, {
+      method: 'POST',
+      body: JSON.stringify({ token: this.me.token, seat }),
+    });
+    this.setState(r.state, r.seats);
+  }
+
   close() {
     this.closed = true;
     if (this.retryTimer) clearTimeout(this.retryTimer);
@@ -236,7 +262,7 @@ async function openServerRoom(code: string, me: RoomIdentity | null): Promise<Ro
   const room = new ServerRoom(code, me);
   room.gameId = r.gameId;
   room.state = r.state;
-  room.seats = r.seats;
+  room.setSeats(r.seats);
   room.connect();
   return room;
 }
@@ -268,9 +294,12 @@ class PeerHost extends BaseRoom implements RoomClient {
     this.refreshSeats();
   }
 
+  private connected() {
+    return new Set([0, ...[...this.conns.values()].map((c) => c.seat)]);
+  }
+
   private refreshSeats() {
-    const connected = new Set([0, ...[...this.conns.values()].map((c) => c.seat)]);
-    this.seats = seatInfos(this.meta, this.state, connected);
+    this.seats = seatInfos(this.meta, this.state, this.connected());
   }
 
   private send(conn: DataConnection, msg: PeerReply) {
@@ -361,6 +390,16 @@ class PeerHost extends BaseRoom implements RoomClient {
     this.broadcast();
   }
 
+  async giveToBot(seat: number) {
+    const next = seatToBot(this.meta, this.state, this.me!.token, seat, this.connected());
+    this.meta = next.meta;
+    this.state = next.state;
+    localApi.saveRoom(this.gameId!, this.meta, this.state);
+    // un ancien invité encore relié (sans place) n'est plus compté comme présent
+    for (const info of this.conns.values()) if (info.seat === seat) info.seat = -1;
+    this.broadcast();
+  }
+
   close() {
     this.closed = true;
     if (this.retryTimer) clearTimeout(this.retryTimer);
@@ -411,7 +450,12 @@ class PeerGuest extends BaseRoom implements RoomClient {
             .then((r) => {
               clearTimeout(timeout);
               // une ancienne identité qui ne correspond plus à rien (salon recréé) est oubliée
-              if (this.me && r.seat !== this.me.seat) this.me = null;
+              if (this.me && r.seat !== this.me.seat) {
+                // place reprise par l'ordinateur pendant l'absence de cet invité
+                if (r.seats[this.me.seat]?.kind === 'bot') this.lostSeat = true;
+                forgetIdentity(this.code);
+                this.me = null;
+              }
               this.setState(r.state, r.seats);
               this.setLink('online');
               resolve();
@@ -447,7 +491,7 @@ class PeerGuest extends BaseRoom implements RoomClient {
       else p.reject(failure(msg.code, msg.message));
     } else if (msg.t === 'state' || msg.t === 'room') this.setState(msg.state, msg.seats);
     else if (msg.t === 'seats') {
-      this.seats = msg.seats;
+      this.setSeats(msg.seats);
       this.emit();
     }
   }
@@ -477,6 +521,10 @@ class PeerGuest extends BaseRoom implements RoomClient {
 
   async bot() {
     /* l'hôte fait jouer les ordinateurs */
+  }
+
+  async giveToBot() {
+    throw failure('notHost');
   }
 
   close() {

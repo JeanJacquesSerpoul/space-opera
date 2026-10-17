@@ -36,3 +36,38 @@ test('deux joueurs partagent un salon, puis l’ordinateur joue côté serveur',
 
   await guestContext.close();
 });
+
+test('l’hôte confie à l’ordinateur la place d’un invité parti', async ({ page: host, browser }) => {
+  await host.goto('/#/nouveau-salon');
+  await host.getByRole('button', { name: /Ouvrir le salon/ }).click();
+  await expect(host).toHaveURL(/#\/salon\/[A-Z2-9]{6}$/);
+  const code = host.url().slice(-6);
+
+  const guestContext = await browser.newContext({ locale: 'fr-FR' });
+  const guest = await guestContext.newPage();
+  await guest.goto(`/#/salon/${code}`);
+  await guest.getByLabel('Votre nom').fill('Zoé');
+  await guest.getByRole('button', { name: 'Prendre ce héros' }).click();
+  await expect(host.getByRole('button', { name: 'Salon' })).toContainText('2/2');
+
+  // un invité connecté garde sa place : pas de bouton pour la lui retirer
+  await host.getByRole('button', { name: /Finir le tour/ }).click();
+  await expect(host.getByText('Zoé joue…')).toBeVisible();
+  await expect(host.getByRole('button', { name: /Confier à l’ordinateur/ })).toHaveCount(0);
+
+  // l'invité s'en va en plein tour : l'hôte confie sa place à l'ordinateur depuis la fenêtre du salon
+  await guestContext.close();
+  await expect(host.getByRole('button', { name: 'Salon' })).toContainText('1/2');
+  await host.getByRole('button', { name: 'Salon' }).click();
+  host.once('dialog', (d) => d.accept());
+  await host
+    .getByRole('dialog', { name: 'Salon' })
+    .getByRole('button', { name: /Confier à l’ordinateur : Zoé/ })
+    .click();
+  await expect(host.getByRole('dialog', { name: 'Salon' }).getByText('Ordinateur')).toHaveCount(2);
+  await host.keyboard.press('Escape');
+
+  // le serveur fait jouer Zoé et l'autre ordinateur, puis la main revient à l'hôte
+  await expect(host.getByText('Tour 2')).toBeVisible({ timeout: 30_000 });
+  await expect(host.getByText('Au tour de Capitaine')).toBeVisible();
+});

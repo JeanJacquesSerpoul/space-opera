@@ -156,14 +156,14 @@ export function roomOfGame(gameId: number): string | null {
   return row?.code ?? null;
 }
 
-/** Un invité a pris sa place : on garde son jeton et le nom de son héros. */
+/** Un invité a pris sa place (ou l'ordinateur la reprend) : on garde son jeton, le nom et le contrôle du héros. */
 export function saveSeats(gameId: number, meta: RoomMeta, state: GameState) {
   db.exec('BEGIN');
   try {
     db.prepare('UPDATE rooms SET seats_json = ? WHERE game_id = ?').run(JSON.stringify(meta.seats), gameId);
     db.prepare('UPDATE games SET state_json = ? WHERE id = ?').run(JSON.stringify(state), gameId);
-    const upd = db.prepare('UPDATE game_players SET name = ? WHERE game_id = ? AND seat = ?');
-    for (const [seat, p] of state.players.entries()) upd.run(p.name, gameId, seat);
+    const upd = db.prepare('UPDATE game_players SET name = ?, is_bot = ? WHERE game_id = ? AND seat = ?');
+    for (const [seat, p] of state.players.entries()) upd.run(p.name, p.isBot ? 1 : 0, gameId, seat);
     db.exec('COMMIT');
   } catch (e) {
     db.exec('ROLLBACK');

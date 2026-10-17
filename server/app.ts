@@ -6,7 +6,7 @@ import { WebSocket, WebSocketServer } from 'ws';
 import { BOT_LEVELS, botAction } from '../shared/bot';
 import { CLASS_IDS, SPECIES_IDS } from '../shared/data';
 import { GameError, applyAction, createGame } from '../shared/engine';
-import { type RoomEvent, type RoomMeta, authorize, joinSeat, newRoom, seatInfos, seatOfToken } from '../shared/online';
+import { type RoomEvent, type RoomMeta, authorize, joinSeat, newRoom, seatInfos, seatOfToken, seatToBot } from '../shared/online';
 import type { Action, GameState, HeroConfig, PlayerColor } from '../shared/types';
 import {
   deleteGame,
@@ -209,6 +209,18 @@ export function createServer() {
     });
   });
 
+  /** L'hôte confie à l'ordinateur une place d'invité libre ou abandonnée : le serveur la fait jouer. */
+  app.post('/api/rooms/:code/bot-seat', (req, res) => {
+    const room = roomOr404(String(req.params.code));
+    const { token, seat } = (req.body ?? {}) as { token: string; seat: number };
+    const next = seatToBot(room.meta, room.state, token, Number(seat), connectedSeats(room.gameId));
+    saveSeats(room.gameId, next.meta, next.state);
+    for (const c of clients.get(room.gameId) ?? []) c.seat = seatOfToken(next.meta, c.token);
+    publish(room.gameId, next.meta, next.state);
+    scheduleBots(room.gameId, next.meta);
+    res.json({ state: next.state, seats: seatsOf(room.gameId, next.meta, next.state) });
+  });
+
   /** Coup d'un joueur du salon : le jeton prouve qu'il contrôle ce siège ; le moteur valide le coup. */
   app.post('/api/rooms/:code/actions', (req, res) => {
     const { gameId: id, meta, state } = roomOr404(String(req.params.code));
@@ -234,7 +246,12 @@ export function createServer() {
 
   app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
     if (err instanceof GameError) {
-      const status = err.code === 'notFound' || err.code === 'roomNotFound' ? 404 : err.code === 'badToken' ? 403 : 400;
+      const status =
+        err.code === 'notFound' || err.code === 'roomNotFound'
+          ? 404
+          : err.code === 'badToken' || err.code === 'notHost'
+            ? 403
+            : 400;
       res.status(status).json({ error: err.message, code: err.code });
       return;
     }

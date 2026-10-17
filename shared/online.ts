@@ -131,6 +131,27 @@ export function joinSeat(
   return { meta: { ...meta, seats }, state: { ...state, players }, token: mine };
 }
 
+/**
+ * L'hôte confie à l'ordinateur une place d'invité restée libre, ou dont l'invité est parti :
+ * la partie n'attend plus personne. Un invité connecté garde sa place.
+ * Renvoie le salon et la partie mis à jour, sans modifier ceux reçus.
+ */
+export function seatToBot(
+  meta: RoomMeta,
+  state: GameState,
+  token: string,
+  seat: number,
+  connected: Set<number>,
+): { meta: RoomMeta; state: GameState } {
+  if (meta.seats[0]?.kind !== 'host' || seatOfToken(meta, token) !== 0)
+    throw new GameError('notHost', 'Seul l’hôte du salon peut confier une place à l’ordinateur.');
+  if (meta.seats[seat]?.kind !== 'remote') throw new GameError('seatTaken', 'Cette place n’est pas une place d’invité.');
+  if (meta.seats[seat].token && connected.has(seat)) throw new GameError('seatPresent', 'L’invité de cette place est connecté.');
+  const seats = meta.seats.map((s, i) => (i === seat ? { kind: 'bot' as const, token: null } : s));
+  const players = state.players.map((p, i) => (i === seat ? { ...p, isBot: true, level: p.level ?? 'normal' } : p));
+  return { meta: { ...meta, seats }, state: { ...state, players } };
+}
+
 export function seatInfos(meta: RoomMeta, state: GameState, connected: Set<number>): SeatInfo[] {
   return meta.seats.map((s, seat) => ({
     seat,

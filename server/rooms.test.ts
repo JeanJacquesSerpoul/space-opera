@@ -34,9 +34,10 @@ function listen(code: string, token?: string) {
   const ws = new WebSocket(`ws://${base}/ws?room=${code}${token ? `&token=${token}` : ''}`);
   ws.on('message', (data) => events.push(JSON.parse(String(data)) as RoomEvent));
   const opened = new Promise<void>((done) => ws.on('open', () => done()));
-  const until = async (pred: (e: RoomEvent) => boolean) => {
+  /** Attend un événement, éventuellement parmi ceux reçus après les `since` premiers. */
+  const until = async (pred: (e: RoomEvent) => boolean, since = 0) => {
     for (let i = 0; i < 300; i++) {
-      const found = events.find(pred);
+      const found = events.slice(since).find(pred);
       if (found) return found;
       await new Promise((r) => setTimeout(r, 10));
     }
@@ -123,8 +124,9 @@ describe('salons en ligne', () => {
     await host.until((e) => e.t === 'state' && e.state.eventSeq === mine.body.state.eventSeq);
 
     // le départ d'un appareil est signalé aux autres
+    const mark = host.events.length;
     guest.ws.close();
-    await host.until((e) => e.t === 'seats' && !e.seats[1].connected);
+    await host.until((e) => e.t === 'seats' && !e.seats[1].connected, mark);
     host.ws.close();
   });
 
@@ -154,6 +156,57 @@ describe('salons en ligne', () => {
     });
     expect(res.status).toBe(400);
     expect(res.body.code).toBe('online');
+  });
+
+  it('laisse l’hôte confier à l’ordinateur une place que personne ne prend', async () => {
+    const created = await post<Created>('/api/games', {
+      online: true,
+      players: [hero('Ada', false, 'cyan'), hero('Invité', false, 'magenta'), hero('Invité 3', false, 'lime')],
+    });
+    const { code, token } = created.body.room;
+    const host = listen(code, token);
+    await host.opened;
+    await host.until((e) => e.t === 'room');
+
+    // l'invité de la place 3 arrive et reste connecté : il garde sa place
+    const joined = await post<Joined>(`/api/rooms/${code}/join`, { seat: 2, name: 'Grace' });
+    const guest = listen(code, joined.body.token);
+    await guest.opened;
+    await host.until((e) => e.t === 'seats' && e.seats[2].connected);
+    const present = await post<{ code: string }>(`/api/rooms/${code}/bot-seat`, { token, seat: 2 });
+    expect(present.body.code).toBe('seatPresent');
+    // seul l'hôte décide, et seulement pour une place d'invité
+    const notHost = await post<{ code: string }>(`/api/rooms/${code}/bot-seat`, { token: joined.body.token, seat: 1 });
+    expect(notHost.status).toBe(403);
+    expect(notHost.body.code).toBe('notHost');
+    expect((await post<{ code: string }>(`/api/rooms/${code}/bot-seat`, { token, seat: 0 })).body.code).toBe('seatTaken');
+
+    // l'hôte passe son tour : la partie attend la place 2, jamais prise…
+    await post(`/api/rooms/${code}/actions`, { token, seat: 0, action: { type: 'wait' } });
+    const given = await post<{ state: GameState; seats: SeatInfo[] }>(`/api/rooms/${code}/bot-seat`, { token, seat: 1 });
+    expect(given.status).toBe(200);
+    expect(given.body.state.players[1].isBot).toBe(true);
+    expect(given.body.seats[1]).toMatchObject({ kind: 'bot', claimed: true, connected: true });
+    // … que le serveur fait désormais jouer : c'est au tour de l'invité présent
+    await guest.until((e) => e.t === 'state' && e.state.current === 2);
+    // la place n'est plus proposée aux invités
+    expect((await post<{ code: string }>(`/api/rooms/${code}/join`, { seat: 1, name: 'Tard' })).body.code).toBe('seatTaken');
+
+    // un invité parti peut aussi être remplacé
+    const mark = host.events.length;
+    guest.ws.close();
+    await host.until((e) => e.t === 'seats' && !e.seats[2].connected, mark);
+    const left = await post<{ state: GameState }>(`/api/rooms/${code}/bot-seat`, { token, seat: 2 });
+    expect(left.status).toBe(200);
+    // son ancien jeton ne permet plus de jouer
+    const stale = await post<{ code: string }>(`/api/rooms/${code}/actions`, {
+      token: joined.body.token,
+      seat: 2,
+      action: { type: 'wait' },
+    });
+    expect(stale.status).toBe(403);
+    await host.until((e) => e.t === 'state' && e.state.round === 2 && e.state.current === 0);
+    host.ws.close();
   });
 
   it('ferme le salon quand la partie est supprimée', async () => {

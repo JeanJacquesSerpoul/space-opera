@@ -66,7 +66,9 @@ export type ErrorCode =
   | 'online'
   | 'roomNotFound'
   | 'seatTaken'
-  | 'badToken';
+  | 'badToken'
+  | 'notHost'
+  | 'seatPresent';
 
 export class GameError extends Error {
   constructor(

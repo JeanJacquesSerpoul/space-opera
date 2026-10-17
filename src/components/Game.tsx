@@ -12,7 +12,7 @@ import { DiceOverlay } from './Dice';
 import { Dialog } from './Dialog';
 import { EndScreen } from './EndScreen';
 import { ActionPanel, CrewBar, HeroSheet, ShopDialog, SystemInfo } from './HeroPanel';
-import { RoomButton } from './Room';
+import { RoomButton, ToBotButton, canGiveToBot } from './Room';
 import { StarMap } from './StarMap';
 
 /** Événements signalés par une notification. */
@@ -243,6 +243,9 @@ export function Game({
             <div className="turn-banner" style={{ '--c': PLAYER_FILL[current.color] } as React.CSSProperties}>
               <span className="dot" />
               {banner}
+              {room && !localTurn && canGiveToBot(room, seatInfo) && (
+                <ToBotButton room={room} seat={state.current} className="ghost" />
+              )}
               {current.isBot && drivesBots && !rush && (
                 <button type="button" className="btn ghost small" onClick={() => setRush(true)}>
                   ⏩ {t('game.speedUp')}
