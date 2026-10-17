@@ -6,7 +6,17 @@ import { WebSocket, WebSocketServer } from 'ws';
 import { BOT_LEVELS, botAction } from '../shared/bot';
 import { CLASS_IDS, SPECIES_IDS } from '../shared/data';
 import { GameError, applyAction, createGame } from '../shared/engine';
-import { type RoomEvent, type RoomMeta, authorize, joinSeat, newRoom, seatInfos, seatOfToken, seatToBot } from '../shared/online';
+import {
+  type HeroChoice,
+  type RoomEvent,
+  type RoomMeta,
+  authorize,
+  joinSeat,
+  newRoom,
+  seatInfos,
+  seatOfToken,
+  seatToBot,
+} from '../shared/online';
 import type { Action, GameState, HeroConfig, PlayerColor } from '../shared/types';
 import {
   deleteGame,
@@ -196,8 +206,12 @@ export function createServer() {
   /** Un invité prend une place libre (ou la reprend avec son jeton). */
   app.post('/api/rooms/:code/join', (req, res) => {
     const room = roomOr404(String(req.params.code));
-    const { seat, name, token } = (req.body ?? {}) as { seat: number; name: string; token?: string };
-    const joined = joinSeat(room.meta, room.state, Number(seat), name, token || undefined);
+    const { seat, name, token, classId, speciesId } = (req.body ?? {}) as {
+      seat: number;
+      name: string;
+      token?: string;
+    } & HeroChoice;
+    const joined = joinSeat(room.meta, room.state, Number(seat), name, token || undefined, { classId, speciesId });
     saveSeats(room.gameId, joined.meta, joined.state);
     for (const c of clients.get(room.gameId) ?? []) c.seat = seatOfToken(joined.meta, c.token);
     publish(room.gameId, joined.meta, joined.state);

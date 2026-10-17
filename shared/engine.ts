@@ -68,7 +68,8 @@ export type ErrorCode =
   | 'seatTaken'
   | 'badToken'
   | 'notHost'
-  | 'seatPresent';
+  | 'seatPresent'
+  | 'heroLocked';
 
 export class GameError extends Error {
   constructor(
@@ -221,6 +222,40 @@ function pushEvent(s: GameState, e: Omit<GameEvent, 'seq'>) {
 
 // ---------------------------------------------------------------- création
 
+/** Héros tout juste arrivé à la station de départ. */
+function newHero(c: HeroConfig): Hero {
+  const h: Hero = {
+    ...c,
+    pos: HOME,
+    hp: 0,
+    resolve: maxResolve(c),
+    credits: START_CREDITS + SPECIES[c.speciesId].credits,
+    renown: 0,
+    xp: 0,
+    gear: {},
+    missions: [],
+    kos: 0,
+  };
+  h.hp = maxHp(h);
+  return h;
+}
+
+/** Ce héros n'a encore rien fait : on peut encore changer sa classe et son espèce. */
+export function heroUntouched(s: GameState, seat: number): boolean {
+  return s.round === 1 && !!s.players[seat] && !s.events.some((e) => e.seat === seat);
+}
+
+/**
+ * Change la classe et l'espèce d'un héros qui n'a pas encore joué (invité d'un salon) :
+ * il est reconstruit comme au début de la partie. Renvoie un nouvel état.
+ */
+export function rebuildHero(state: GameState, seat: number, patch: Pick<HeroConfig, 'classId' | 'speciesId'>): GameState {
+  if (!CLASSES[patch.classId] || !SPECIES[patch.speciesId]) fail('unknownAction', 'Classe ou espèce inconnue.');
+  if (!heroUntouched(state, seat)) fail('heroLocked', 'Ce héros a déjà joué : sa classe ne change plus.');
+  const players = state.players.map((h, i) => (i === seat ? { ...newHero({ ...h, ...patch }), pos: h.pos } : h));
+  return { ...state, players };
+}
+
 export function createGame(configs: HeroConfig[], seed = Date.now()): GameState {
   if (configs.length < 1 || configs.length > 5) fail('players', 'Il faut entre 1 et 5 héros.');
   if (new Set(configs.map((c) => c.color)).size !== configs.length) fail('colors', 'Chaque héros doit avoir sa couleur.');
@@ -245,22 +280,7 @@ export function createGame(configs: HeroConfig[], seed = Date.now()): GameState 
     eventSeq: 0,
     results: null,
   };
-  s.players = configs.map((c) => {
-    const h: Hero = {
-      ...c,
-      pos: HOME,
-      hp: 0,
-      resolve: maxResolve(c),
-      credits: START_CREDITS + SPECIES[c.speciesId].credits,
-      renown: 0,
-      xp: 0,
-      gear: {},
-      missions: [],
-      kos: 0,
-    };
-    h.hp = maxHp(h);
-    return h;
-  });
+  s.players = configs.map(newHero);
   // les missions de rang 3 arrivent plutôt en seconde moitié de partie
   const easy = shuffle(
     s,

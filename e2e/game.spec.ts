@@ -2,6 +2,11 @@ import { expect, test } from '@playwright/test';
 
 // Version hors ligne (moteur dans le navigateur) : voir playwright.config.ts.
 
+// la présentation animée de la première visite est testée à part (intro.spec.ts)
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('so.introSeen', '1'));
+});
+
 test('lance une partie, saute vers un système et joue un tour contre les ordinateurs', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Space Opera' })).toBeVisible();
@@ -81,4 +86,24 @@ test('confie à l’ordinateur la place d’un invité qui ne vient pas', async 
   await page.getByRole('button', { name: 'Salon' }).click();
   await expect(page.getByText('En attente d’un joueur')).toBeHidden();
   await expect(page.getByRole('dialog', { name: 'Salon' }).getByText('Ordinateur')).toHaveCount(2);
+});
+
+test('retrouve un salon de l’appareil depuis l’accueil', async ({ page }) => {
+  await page.goto('/#/nouveau-salon');
+  await page.getByRole('button', { name: /Ouvrir le salon/ }).click();
+  await expect(page).toHaveURL(/#\/salon\/[A-Z2-9]{6}$/);
+  const code = page.url().slice(-6);
+  await page.getByRole('button', { name: 'Quitter' }).click();
+
+  const rooms = page.locator('.online-rooms');
+  await expect(rooms.getByText(code)).toBeVisible();
+  await expect(rooms.getByText('👑 Hôte · Capitaine')).toBeVisible();
+  await rooms.getByText(code).click();
+  await expect(page.getByText('Au tour de Capitaine')).toBeVisible();
+
+  // oublier le salon le retire de la liste
+  await page.getByRole('button', { name: 'Quitter' }).click();
+  page.once('dialog', (d) => d.accept());
+  await rooms.getByRole('button', { name: `Oublier le salon ${code}` }).click();
+  await expect(rooms.getByText(code)).toHaveCount(0);
 });

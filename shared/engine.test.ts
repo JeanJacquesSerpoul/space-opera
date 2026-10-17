@@ -11,8 +11,10 @@ import {
   createGame,
   heroLevel,
   heroSpeed,
+  heroUntouched,
   maxHp,
   reachable,
+  rebuildHero,
   rollChance,
   statValue,
 } from './engine';
@@ -242,5 +244,25 @@ describe('menace et fin de partie', () => {
       for (const r of state.results!) expect(r.total).toBe(r.renown + r.creditPoints + r.legendBonus);
       expect(state.players.some((p) => p.missions.length > 0)).toBe(true);
     }
+  });
+});
+
+describe('héros d’un invité', () => {
+  it('change de classe et d’espèce tant qu’il n’a pas joué, sans toucher au reste de la partie', () => {
+    const s = createGame(heroes(2), 42);
+    expect(heroUntouched(s, 1)).toBe(true);
+    const next = rebuildHero(s, 1, { classId: 'soldier', speciesId: 'vorn' });
+    const h = next.players[1];
+    expect([h.classId, h.speciesId, h.name, h.color]).toEqual(['soldier', 'vorn', s.players[1].name, s.players[1].color]);
+    expect(h.hp).toBe(maxHp(h));
+    expect(h.hp).toBe(18); // Soldat 16 + Vorn 2
+    expect(next.rng).toBe(s.rng);
+    expect(next.board).toEqual(s.board);
+    expect(s.players[1].classId).not.toBe('soldier'); // état reçu intact
+
+    // une fois qu'il a joué, sa classe est fixée
+    const played = applyAction(applyAction(s, 0, { type: 'wait' }), 1, { type: 'wait' });
+    expect(heroUntouched(played, 1)).toBe(false);
+    expect(() => rebuildHero(played, 1, { classId: 'soldier', speciesId: 'vorn' })).toThrow(GameError);
   });
 });

@@ -8,6 +8,7 @@ import { isRoomCode } from '../../shared/online';
 import type { ClassId, HeroConfig, PlayerColor } from '../../shared/types';
 import { type GameSummary, type LeaderRow, OFFLINE, api } from '../lib/api';
 import { errorText, useT } from '../lib/i18n';
+import { forgetIdentity, listRooms } from '../lib/online';
 import { saveName, savedName } from '../lib/prefs';
 import { PLAYER_COLORS, PLAYER_FILL, STAT_ICON } from '../lib/theme';
 import { Brand, Starfield } from './Brand';
@@ -16,12 +17,16 @@ import { Brand, Starfield } from './Brand';
 
 export function Home({
   onNew,
+  onNewRoom,
   onOpen,
   onRoom,
+  onIntro,
   onRules,
   onSettings,
 }: {
   onNew: () => void;
+  onNewRoom: () => void;
+  onIntro: () => void;
   onOpen: (id: number) => void;
   onRoom: (code: string) => void;
   onRules: () => void;
@@ -31,7 +36,6 @@ export function Home({
   const [games, setGames] = useState<GameSummary[] | null>(null);
   const [leaders, setLeaders] = useState<LeaderRow[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [code, setCode] = useState('');
 
   const refresh = () => {
     api
@@ -65,6 +69,9 @@ export function Home({
           <button type="button" className="btn primary big" onClick={onNew}>
             {t('home.new')}
           </button>
+          <button type="button" className="btn" onClick={onIntro}>
+            {t('home.intro')}
+          </button>
           <button type="button" className="btn" onClick={onRules}>
             {t('home.rules')}
           </button>
@@ -72,34 +79,6 @@ export function Home({
             ⚙ {t('home.settings')}
           </button>
         </div>
-        <form
-          className="join-room"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (isRoomCode(code)) onRoom(code);
-          }}
-        >
-          <label htmlFor="room-code" className="muted small">
-            {t('home.joinHint')}
-          </label>
-          <div className="join-room-row">
-            <input
-              id="room-code"
-              className="name-input"
-              value={code}
-              maxLength={6}
-              autoCapitalize="characters"
-              autoComplete="off"
-              spellCheck={false}
-              placeholder="ABC234"
-              aria-label={t('home.joinTitle')}
-              onChange={(e) => setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
-            />
-            <button type="submit" className="btn" disabled={!isRoomCode(code)}>
-              🌐 {t('home.join')}
-            </button>
-          </div>
-        </form>
         {OFFLINE && <p className="muted small">{t('home.offline')}</p>}
         {error && <p className="error">{error}</p>}
       </motion.header>
@@ -137,6 +116,8 @@ export function Home({
           </ul>
         </section>
 
+        <OnlineRooms onRoom={onRoom} onNewRoom={onNewRoom} />
+
         <section className="panel-card">
           <h2>{t('home.leaderboard')}</h2>
           {leaders.length === 0 ? (
@@ -171,6 +152,95 @@ export function Home({
         </section>
       </div>
     </div>
+  );
+}
+
+/**
+ * Salons en ligne : en créer un, en rejoindre un avec son code,
+ * ou revenir dans un salon déjà connu de cet appareil.
+ */
+function OnlineRooms({ onRoom, onNewRoom }: { onRoom: (code: string) => void; onNewRoom: () => void }) {
+  const { t, lang } = useT();
+  const [code, setCode] = useState('');
+  const [rooms, setRooms] = useState(listRooms);
+
+  const forget = (room: string) => {
+    if (!confirm(t('home.forgetConfirm', { code: room }))) return;
+    forgetIdentity(room);
+    setRooms(listRooms());
+  };
+
+  return (
+    <section className="panel-card online-rooms">
+      <h2>🌐 {t('home.rooms')}</h2>
+      <div className="online-rooms-actions">
+        <button type="button" className="btn primary" onClick={onNewRoom}>
+          {t('home.createRoom')}
+        </button>
+        <form
+          className="join-room"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (isRoomCode(code)) onRoom(code);
+          }}
+        >
+          <label htmlFor="room-code" className="muted small">
+            {t('home.joinHint')}
+          </label>
+          <div className="join-room-row">
+            <input
+              id="room-code"
+              className="name-input"
+              value={code}
+              maxLength={6}
+              autoCapitalize="characters"
+              autoComplete="off"
+              spellCheck={false}
+              placeholder="ABC234"
+              aria-label={t('home.joinTitle')}
+              onChange={(e) => setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
+            />
+            <button type="submit" className="btn" disabled={!isRoomCode(code)}>
+              {t('home.join')}
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <h3>{t('home.myRooms')}</h3>
+      {rooms.length === 0 ? (
+        <p className="muted small">{t('home.roomsEmpty')}</p>
+      ) : (
+        <ul className="saved-list">
+          {rooms.map((r) => (
+            <li key={r.code} className="saved">
+              <button type="button" className="saved-open" onClick={() => onRoom(r.code)}>
+                <span className="saved-meta">
+                  <b className="room-code small">{r.code}</b> · {new Date(r.at).toLocaleDateString(lang)}
+                </span>
+                <span className="saved-players">
+                  {r.ids.map((id) => (
+                    <span key={id.token} className="chip">
+                      {id.role === 'host' ? `👑 ${t('home.asHost')}` : t('home.asGuest')}
+                      {id.name && ` · ${id.name}`}
+                    </span>
+                  ))}
+                </span>
+              </button>
+              <button
+                type="button"
+                className="btn ghost small"
+                onClick={() => forget(r.code)}
+                aria-label={t('home.forgetRoom', { code: r.code })}
+                title={t('home.forgetRoom', { code: r.code })}
+              >
+                ✕
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 

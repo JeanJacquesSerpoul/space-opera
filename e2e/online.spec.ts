@@ -3,6 +3,11 @@ import { expect, test } from '@playwright/test';
 // Partie en ligne via le serveur (projet « online » de playwright.config.ts) :
 // deux contextes de navigateur, donc deux joueurs avec chacun leur stockage local.
 
+// la présentation animée de la première visite est testée à part (intro.spec.ts)
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('so.introSeen', '1'));
+});
+
 test('deux joueurs partagent un salon, puis l’ordinateur joue côté serveur', async ({ page: host, browser }) => {
   await host.goto('/#/nouvelle');
   await host.getByRole('button', { name: /En ligne/ }).click();
@@ -17,6 +22,9 @@ test('deux joueurs partagent un salon, puis l’ordinateur joue côté serveur',
   await guest.goto(`/#/salon/${code}`);
   await expect(guest.getByRole('heading', { name: 'Rejoindre l’équipage' })).toBeVisible();
   await guest.getByLabel('Votre nom').fill('Zoé');
+  // l'invité choisit la classe et l'espèce de son héros
+  await guest.getByRole('button', { name: '◈ Agent' }).click();
+  await guest.getByRole('combobox').selectOption('android');
   await guest.getByRole('button', { name: 'Prendre ce héros' }).click();
 
   await expect(host.getByRole('button', { name: 'Salon' })).toContainText('2/2');
@@ -27,6 +35,7 @@ test('deux joueurs partagent un salon, puis l’ordinateur joue côté serveur',
   await host.getByRole('button', { name: /Finir le tour/ }).click();
   await expect(guest.getByText('Au tour de Zoé')).toBeVisible();
   await expect(host.getByText('Zoé joue…')).toBeVisible();
+  await expect(host.getByText(/Agent · Androïde/)).toBeVisible();
 
   // l'invité finit à son tour : le serveur fait jouer l'ordinateur, puis la main revient à l'hôte
   await guest.getByRole('button', { name: /Finir le tour/ }).click();
@@ -70,4 +79,34 @@ test('l’hôte confie à l’ordinateur la place d’un invité parti', async (
   // le serveur fait jouer Zoé et l'autre ordinateur, puis la main revient à l'hôte
   await expect(host.getByText('Tour 2')).toBeVisible({ timeout: 30_000 });
   await expect(host.getByText('Au tour de Capitaine')).toBeVisible();
+});
+
+test('deux onglets du même navigateur ne jouent pas la même place', async ({ page: host }) => {
+  await host.goto('/#/nouveau-salon');
+  await host.getByRole('button', { name: /Ouvrir le salon/ }).click();
+  await expect(host).toHaveURL(/#\/salon\/[A-Z2-9]{6}$/);
+  const code = host.url().slice(-6);
+  await expect(host.getByText('Au tour de Capitaine')).toBeVisible();
+
+  // même navigateur (même stockage) : le deuxième onglet n'est pas pris pour l'hôte
+  const tab = await host.context().newPage();
+  await tab.goto(`/#/salon/${code}`);
+  await expect(tab.getByRole('heading', { name: 'Rejoindre l’équipage' })).toBeVisible();
+  await tab.getByLabel('Votre nom').fill('Zoé');
+  await tab.getByRole('button', { name: 'Prendre ce héros' }).click();
+  await expect(tab.getByText('Capitaine joue…')).toBeVisible();
+  await expect(host.getByRole('button', { name: 'Salon' })).toContainText('2/2');
+
+  // chaque onglet retrouve sa place après rechargement
+  await tab.reload();
+  await expect(tab.getByText('Capitaine joue…')).toBeVisible();
+  await host.reload();
+  await expect(host.getByText('Au tour de Capitaine')).toBeVisible();
+
+  // l'accueil liste les deux places de l'appareil dans ce salon
+  const home = await host.context().newPage();
+  await home.goto('/');
+  const rooms = home.locator('.online-rooms');
+  await expect(rooms.getByText('👑 Hôte · Capitaine')).toBeVisible();
+  await expect(rooms.getByText('Invité · Zoé')).toBeVisible();
 });

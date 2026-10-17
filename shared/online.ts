@@ -1,4 +1,4 @@
-import { GameError } from './engine';
+import { GameError, rebuildHero } from './engine';
 import type { Action, GameState, HeroConfig } from './types';
 
 /**
@@ -27,6 +27,8 @@ export interface RoomIdentity {
   role: 'host' | 'guest';
   /** Partie locale de l'hôte (mode pair-à-pair). */
   gameId?: number;
+  /** Nom du héros joué, pour la liste des salons de l'appareil. */
+  name?: string;
   /** Dernière utilisation (ms), pour lister les salons du plus récent au plus ancien. */
   at?: number;
 }
@@ -41,7 +43,7 @@ export type RoomEvent =
 /** Requêtes d'un invité vers l'hôte en pair-à-pair (chaque requête attend une réponse de même `id`). */
 export type PeerRequest =
   | { t: 'hello'; id: number; token?: string }
-  | { t: 'join'; id: number; seat: number; name: string; token?: string }
+  | { t: 'join'; id: number; seat: number; name: string; token?: string; hero?: HeroChoice }
   | { t: 'act'; id: number; token: string; seat: number; action: Action };
 
 /** Réponses de l'hôte, en plus des événements diffusés à tous. */
@@ -86,6 +88,9 @@ export function cleanName(name: unknown, fallback: string): string {
   );
 }
 
+/** Classe et espèce choisies par l'invité pour son héros (tant qu'il n'a pas joué). */
+export type HeroChoice = Partial<Pick<HeroConfig, 'classId' | 'speciesId'>>;
+
 /** Ce que le serveur (ou l'hôte) garde d'un salon, en plus de la partie elle-même. */
 export interface RoomMeta {
   code: string;
@@ -111,7 +116,8 @@ export function authorize(meta: RoomMeta, token: string, seat: number) {
 }
 
 /**
- * Un invité prend (ou reprend, avec son jeton) un siège libre et donne son nom au héros.
+ * Un invité prend (ou reprend, avec son jeton) un siège libre, donne son nom au héros
+ * et, si le héros n'a pas encore joué, peut changer sa classe et son espèce.
  * Renvoie le salon et la partie mis à jour, sans modifier ceux reçus.
  */
 export function joinSeat(
@@ -120,6 +126,7 @@ export function joinSeat(
   seat: number,
   name: string,
   token?: string,
+  hero?: HeroChoice,
 ): { meta: RoomMeta; state: GameState; token: string } {
   const s = meta.seats[seat];
   if (s?.kind !== 'remote') throw new GameError('seatTaken', 'Cette place n’est pas disponible.');
@@ -127,8 +134,13 @@ export function joinSeat(
   // un appareil ne garde qu'une place : il quitte l'ancienne s'il change
   const mine = token ?? makeToken();
   const seats = meta.seats.map((x, i) => (i === seat ? { ...x, token: mine } : x.token === mine ? { ...x, token: null } : x));
-  const players = state.players.map((p, i) => (i === seat ? { ...p, name: cleanName(name, p.name) } : p));
-  return { meta: { ...meta, seats }, state: { ...state, players }, token: mine };
+  const current = state.players[seat];
+  const classId = hero?.classId ?? current.classId;
+  const speciesId = hero?.speciesId ?? current.speciesId;
+  const rebuilt =
+    classId !== current.classId || speciesId !== current.speciesId ? rebuildHero(state, seat, { classId, speciesId }) : state;
+  const players = rebuilt.players.map((p, i) => (i === seat ? { ...p, name: cleanName(name, p.name) } : p));
+  return { meta: { ...meta, seats }, state: { ...rebuilt, players }, token: mine };
 }
 
 /**

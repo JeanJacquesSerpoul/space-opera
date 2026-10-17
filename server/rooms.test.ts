@@ -80,9 +80,15 @@ describe('salons en ligne', () => {
     await host.opened;
     await host.until((e) => e.t === 'room');
 
-    const joined = await post<Joined>(`/api/rooms/${code}/join`, { seat: 1, name: 'Grace' });
+    // l'invité choisit aussi la classe et l'espèce de son héros
+    const joined = await post<Joined>(`/api/rooms/${code}/join`, {
+      seat: 1,
+      name: 'Grace',
+      classId: 'agent',
+      speciesId: 'android',
+    });
     expect(joined.status).toBe(200);
-    expect(joined.body.state.players[1].name).toBe('Grace');
+    expect(joined.body.state.players[1]).toMatchObject({ name: 'Grace', classId: 'agent', speciesId: 'android', hp: 13 });
     // l'hôte voit arriver l'invité
     await host.until((e) => e.t === 'state' && e.state.players[1].name === 'Grace');
     // la place est prise : un autre appareil ne peut plus la prendre, ni la place de l'hôte
@@ -114,6 +120,16 @@ describe('salons en ligne', () => {
     // présence : les deux appareils sont connectés
     expect(pushed.t === 'state' && pushed.seats.every((s) => s.connected)).toBe(true);
 
+    // l'hôte a joué, pas encore l'invité : il peut toujours changer de classe en reprenant sa place
+    const again = await post<Joined>(`/api/rooms/${code}/join`, {
+      seat: 1,
+      name: 'Grace',
+      token: joined.body.token,
+      classId: 'mystic',
+      speciesId: 'lumian',
+    });
+    expect(again.body.state.players[1].classId).toBe('mystic');
+
     // l'invité joue à son tour, l'hôte le voit
     const mine = await post<{ state: GameState }>(`/api/rooms/${code}/actions`, {
       token: joined.body.token,
@@ -121,6 +137,14 @@ describe('salons en ligne', () => {
       action: { type: 'rest' },
     });
     expect(mine.status).toBe(200);
+    // une fois qu'il a joué, sa classe ne change plus
+    const locked = await post<{ code: string }>(`/api/rooms/${code}/join`, {
+      seat: 1,
+      name: 'Grace',
+      token: joined.body.token,
+      classId: 'soldier',
+    });
+    expect(locked.body.code).toBe('heroLocked');
     await host.until((e) => e.t === 'state' && e.state.eventSeq === mine.body.state.eventSeq);
 
     // le départ d'un appareil est signalé aux autres

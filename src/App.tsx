@@ -1,5 +1,5 @@
 import { AnimatePresence } from 'motion/react';
-import { useEffect, useState } from 'react';
+import { Suspense, lazy, useEffect, useState } from 'react';
 import type { HeroConfig } from '../shared/types';
 import { Game } from './components/Game';
 import { RoomScreen } from './components/Room';
@@ -7,7 +7,11 @@ import { RulesDialog } from './components/Rules';
 import { Home, Setup } from './components/Screens';
 import { SettingsDialog } from './components/Settings';
 import { api } from './lib/api';
+import { introSeen } from './lib/intro';
 import { createRoom } from './lib/online';
+
+// présentation chargée à la demande (première visite ou bouton de l'accueil)
+const IntroVideo = lazy(() => import('./components/IntroVideo').then((m) => ({ default: m.IntroVideo })));
 
 type Route =
   | { name: 'home' }
@@ -28,6 +32,8 @@ function parseHash(): Route {
 export default function App() {
   const [route, setRoute] = useState<Route>(parseHash);
   const [dialog, setDialog] = useState<'rules' | 'settings' | null>(null);
+  // présentation animée à la toute première ouverture (sauf arrivée par un lien d'invitation)
+  const [showIntro, setShowIntro] = useState(() => !introSeen() && parseHash().name !== 'room');
 
   useEffect(() => {
     const onHash = () => setRoute(parseHash());
@@ -89,6 +95,8 @@ export default function App() {
       screen = (
         <Home
           onNew={() => go('#/nouvelle')}
+          onNewRoom={() => go('#/nouveau-salon')}
+          onIntro={() => setShowIntro(true)}
           onOpen={(id) => go(`#/partie/${id}`)}
           onRoom={(code) => go(`#/salon/${code}`)}
           onRules={openRules}
@@ -103,6 +111,11 @@ export default function App() {
       <AnimatePresence>
         {dialog === 'rules' && <RulesDialog key="rules" onClose={() => setDialog(null)} />}
         {dialog === 'settings' && <SettingsDialog key="settings" onClose={() => setDialog(null)} />}
+        {showIntro && (
+          <Suspense key="intro" fallback={null}>
+            <IntroVideo onClose={() => setShowIntro(false)} />
+          </Suspense>
+        )}
       </AnimatePresence>
     </>
   );

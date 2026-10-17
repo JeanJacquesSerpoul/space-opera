@@ -61,21 +61,38 @@
   padding: 5px 12px;
 }
 
+/* accueil : salons en ligne */
+.online-rooms h3 {
+  margin: 14px 0 8px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.online-rooms-actions {
+  display: grid;
+  gap: 10px;
+}
+
+.room-code.small {
+  font-size: 0.85rem;
+  letter-spacing: 0.15em;
+  text-shadow: none;
+}
+
 /* accueil : rejoindre avec un code */
 .join-room {
   display: grid;
   gap: 6px;
-  justify-items: center;
-  margin: 14px auto 6px;
 }
 
 .join-room-row {
   display: flex;
   gap: 8px;
-  width: min(320px, 100%);
 }
 
 .join-room-row .name-input {
+  /* flex: 1 fait grandir le champ ; sans largeur propre, il ne pousse plus la carte */
+  width: 0;
   text-transform: uppercase;
   letter-spacing: 0.2em;
   font-family: var(--font-title);
@@ -118,6 +135,18 @@
 .join-form {
   display: grid;
   gap: 14px;
+}
+
+.join-hero {
+  display: grid;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.join-hero .class-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 .seat-list {

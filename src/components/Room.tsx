@@ -1,13 +1,15 @@
 import { AnimatePresence, motion } from 'motion/react';
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
-import { CLASSES } from '../../shared/data';
+import { CLASSES, CLASS_IDS, SPECIES_IDS, STATS } from '../../shared/data';
+import { heroUntouched } from '../../shared/engine';
 import type { MessageKey } from '../../shared/i18n';
-import type { SeatInfo } from '../../shared/online';
+import type { HeroChoice, SeatInfo } from '../../shared/online';
+import type { HeroConfig } from '../../shared/types';
 import { errorText, useT } from '../lib/i18n';
 import { type RoomClient, openRoom, roomLink } from '../lib/online';
 import { saveName, savedName } from '../lib/prefs';
-import { PLAYER_FILL } from '../lib/theme';
+import { PLAYER_FILL, STAT_ICON } from '../lib/theme';
 import { Starfield } from './Brand';
 import { Dialog } from './Dialog';
 import { Game } from './Game';
@@ -89,12 +91,14 @@ function RoomView({ room, ...props }: ScreenProps & { room: RoomClient }) {
   return <Game id={room.gameId ?? 0} room={room} {...props} />;
 }
 
-/** Un invité arrive par le lien : il choisit un héros libre et donne son nom. */
+/** Un invité arrive par le lien : il choisit un héros libre, donne son nom et peut changer sa classe et son espèce. */
 function JoinRoom({ room, onExit }: { room: RoomClient; onExit: () => void }) {
   const { t } = useT();
   const free = room.seats.filter((s) => s.kind === 'remote' && !s.claimed);
   const [seat, setSeat] = useState<number | null>(free[0]?.seat ?? null);
   const [name, setName] = useState(() => savedName(''));
+  // classe et espèce choisies, par place (au départ, celles prévues par l'hôte)
+  const [choices, setChoices] = useState<Record<number, HeroChoice>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const host = room.seats.find((s) => s.kind === 'host');
@@ -111,7 +115,11 @@ function JoinRoom({ room, onExit }: { room: RoomClient; onExit: () => void }) {
     setError(null);
     try {
       if (name.trim()) saveName(name.trim());
-      await room.join(seat, name.trim() || room.state.players[seat].name);
+      await room.join(
+        seat,
+        name.trim() || room.state.players[seat].name,
+        heroUntouched(room.state, seat) ? choices[seat] : undefined,
+      );
     } catch (e) {
       setError(errorText(e, t));
       setBusy(false);
@@ -150,6 +158,7 @@ function JoinRoom({ room, onExit }: { room: RoomClient; onExit: () => void }) {
                 seat={s}
                 selectable={free.includes(s)}
                 selected={seat === s.seat}
+                hero={{ ...room.state.players[s.seat], ...choices[s.seat] }}
                 onPick={setSeat}
               />
             ))}
@@ -164,6 +173,13 @@ function JoinRoom({ room, onExit }: { room: RoomClient; onExit: () => void }) {
               onChange={(e) => setName(e.target.value)}
             />
           </label>
+          {seat !== null && (
+            <HeroPicker
+              hero={{ ...room.state.players[seat], ...choices[seat] }}
+              locked={!heroUntouched(room.state, seat)}
+              onChange={(c) => setChoices((all) => ({ ...all, [seat]: { ...all[seat], ...c } }))}
+            />
+          )}
         </div>
       )}
       {error && <p className="error center">{error}</p>}
@@ -175,6 +191,59 @@ function JoinRoom({ room, onExit }: { room: RoomClient; onExit: () => void }) {
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+/** Classe et espèce du héros de l'invité (figées si le héros a déjà joué). */
+function HeroPicker({ hero, locked, onChange }: { hero: HeroConfig; locked: boolean; onChange: (choice: HeroChoice) => void }) {
+  const { t } = useT();
+  const cls = CLASSES[hero.classId];
+  return (
+    <div className="join-hero" style={{ '--c': PLAYER_FILL[hero.color] } as React.CSSProperties}>
+      <div className="field">
+        <span>{t('setup.class')}</span>
+        <div className="class-picker">
+          {CLASS_IDS.map((c) => (
+            <button
+              key={c}
+              type="button"
+              aria-pressed={hero.classId === c}
+              className={`class-btn ${hero.classId === c ? 'on' : ''}`}
+              title={t(`class.${c}` as MessageKey)}
+              disabled={locked}
+              onClick={() => onChange({ classId: c })}
+            >
+              <span>{CLASSES[c].glyph}</span>
+              <small>{t(`class.${c}` as MessageKey)}</small>
+            </button>
+          ))}
+        </div>
+      </div>
+      <p className="power">{t(`power.${hero.classId}` as MessageKey)}</p>
+      <div className="mini-stats">
+        {STATS.map((st) => (
+          <span key={st} title={t(`stat.${st}` as MessageKey)}>
+            {STAT_ICON[st]} {cls.stats[st]}
+          </span>
+        ))}
+        <span>♥ {cls.hp}</span>
+      </div>
+      <label className="field">
+        <span>{t('setup.species')}</span>
+        <select
+          value={hero.speciesId}
+          disabled={locked}
+          onChange={(e) => onChange({ speciesId: e.target.value as HeroConfig['speciesId'] })}
+        >
+          {SPECIES_IDS.map((sp) => (
+            <option key={sp} value={sp}>
+              {t(`species.${sp}` as MessageKey)} — {t(`speciesDesc.${sp}` as MessageKey)}
+            </option>
+          ))}
+        </select>
+      </label>
+      {locked && <p className="muted small">{t('room.heroLocked')}</p>}
     </div>
   );
 }
@@ -217,16 +286,19 @@ function SeatRow({
   seat,
   selectable,
   selected,
+  hero: shown,
   onPick,
 }: {
   room: RoomClient;
   seat: SeatInfo;
   selectable?: boolean;
   selected?: boolean;
+  /** Héros affiché, avec la classe et l'espèce choisies par l'invité. */
+  hero?: HeroConfig;
   onPick?: (seat: number) => void;
 }) {
   const { t } = useT();
-  const hero = room.state.players[seat.seat];
+  const hero = shown ?? room.state.players[seat.seat];
   const mine = room.me?.seat === seat.seat;
   const role =
     seat.kind === 'bot'
